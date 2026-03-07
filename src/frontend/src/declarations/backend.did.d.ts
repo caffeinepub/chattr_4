@@ -10,6 +10,33 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Ban {
+  'timestamp' : bigint,
+  'displayId' : string,
+  'reason' : string,
+}
+export interface Category { 'id' : bigint, 'name' : string }
+export interface Post {
+  'id' : bigint,
+  'isDeleted' : boolean,
+  'content' : string,
+  'createdAt' : bigint,
+  'mediaUrl' : [] | [string],
+  'authorDisplayId' : string,
+  'mediaType' : string,
+  'threadId' : bigint,
+}
+export interface Thread {
+  'id' : bigint,
+  'categoryId' : bigint,
+  'postCount' : bigint,
+  'title' : string,
+  'lastActivity' : bigint,
+  'createdAt' : bigint,
+  'creatorDisplayId' : string,
+  'isClosed' : boolean,
+  'isArchived' : boolean,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -37,6 +64,29 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  'addCategory' : ActorMethod<[string], Category>,
+  'banUser' : ActorMethod<[string, string], Ban>,
+  'createPost' : ActorMethod<
+    [bigint, string, string, [] | [string], string],
+    Post
+  >,
+  'createThread' : ActorMethod<[string, bigint, string], Thread>,
+  'deleteCategory' : ActorMethod<[bigint], boolean>,
+  'deletePost' : ActorMethod<[bigint], Post>,
+  'getAllPosts' : ActorMethod<[], Array<Post>>,
+  'getAllThreads' : ActorMethod<[], Array<Thread>>,
+  'getArchivedThreads' : ActorMethod<[], Array<Thread>>,
+  'getBans' : ActorMethod<[], Array<Ban>>,
+  'getCategories' : ActorMethod<[], Array<Category>>,
+  'getPostsByThread' : ActorMethod<[bigint], Array<Post>>,
+  'getThread' : ActorMethod<[bigint], [] | [Thread]>,
+  'getThreads' : ActorMethod<[], Array<Thread>>,
+  'initialize' : ActorMethod<[], undefined>,
+  'isBanned' : ActorMethod<[string], boolean>,
+  'logAction' : ActorMethod<[string], undefined>,
+  'start' : ActorMethod<[], undefined>,
+  'unbanUser' : ActorMethod<[string], boolean>,
+  'updateThread' : ActorMethod<[bigint, boolean, boolean], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -16,17 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  type Category,
-  type Thread,
-  createThread,
-  getCategories,
-  getPresenceCount,
-  getThreads,
-  isThreadLive,
-} from "../store";
+import * as backendApi from "../backendApi";
+import type { Category, Thread } from "../backendApi";
+import { getSessionId, isThreadLive } from "../store";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Politics: "#c0392b",
@@ -41,8 +35,8 @@ function getCategoryColor(name: string): string {
   return CATEGORY_COLORS[name] ?? "#555";
 }
 
-function timeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
+function timeAgo(tsMs: number): string {
+  const diff = Date.now() - tsMs;
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -52,25 +46,9 @@ function timeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
-// Stable random user count per thread per page load
-function useStableUserCounts(threads: Thread[]): Map<number, number> {
-  const countsRef = useRef<Map<number, number>>(new Map());
-
-  for (const t of threads) {
-    if (!countsRef.current.has(t.id)) {
-      const presence = getPresenceCount(t.id);
-      const extra = Math.floor(Math.random() * 12);
-      countsRef.current.set(t.id, presence + extra);
-    }
-  }
-
-  return countsRef.current;
-}
-
 interface ThreadCardProps {
   thread: Thread;
   categories: Category[];
-  userCounts: Map<number, number>;
   index: number;
   onClick: () => void;
 }
@@ -91,18 +69,12 @@ function LiveDot({ live }: { live: boolean }) {
   );
 }
 
-function ThreadCard({
-  thread,
-  categories,
-  userCounts,
-  index,
-  onClick,
-}: ThreadCardProps) {
+function ThreadCard({ thread, categories, index, onClick }: ThreadCardProps) {
+  const threadIdNum = Number(thread.id);
   const category = categories.find((c) => c.id === thread.categoryId);
-  const userCount =
-    (userCounts.get(thread.id) ?? 0) + getPresenceCount(thread.id);
-  const live = isThreadLive(thread.id) || userCount > 0;
+  const live = isThreadLive(threadIdNum);
   const catColor = category ? getCategoryColor(category.name) : "#555";
+  const createdAtMs = backendApi.nsToMs(thread.createdAt);
 
   return (
     <div
@@ -165,10 +137,7 @@ function ThreadCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="font-mono text-xs" style={{ color: "#555" }}>
-            {thread.postCount} posts
-          </span>
-          <span className="font-mono text-xs" style={{ color: "#555" }}>
-            {userCount} {userCount === 1 ? "user" : "users"}
+            {Number(thread.postCount)} posts
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -176,7 +145,7 @@ function ThreadCard({
             {thread.creatorDisplayId}
           </span>
           <span className="font-mono text-xs" style={{ color: "#333" }}>
-            {timeAgo(thread.createdAt)}
+            {timeAgo(createdAtMs)}
           </span>
         </div>
       </div>
@@ -186,16 +155,24 @@ function ThreadCard({
 
 export default function CatalogPage() {
   const navigate = useNavigate();
+  const sessionId = getSessionId();
   const [categories, setCategories] = useState<Category[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<bigint | null>(null);
   const [showNewThread, setShowNewThread] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newCategoryId, setNewCategoryId] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
-  const loadData = useCallback(() => {
-    setCategories(getCategories());
-    setThreads(getThreads().filter((t) => !t.isArchived));
+  const loadData = useCallback(async () => {
+    const [cats, threadList] = await Promise.all([
+      backendApi.getCategories(),
+      backendApi.getThreads(),
+    ]);
+    setCategories(cats);
+    setThreads(threadList.filter((t) => !t.isArchived && !t.isClosed));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -204,18 +181,17 @@ export default function CatalogPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const userCounts = useStableUserCounts(threads);
-
-  const filteredThreads = selectedCategory
-    ? threads.filter((t) => t.categoryId === selectedCategory)
-    : threads;
+  const filteredThreads =
+    selectedCategory !== null
+      ? threads.filter((t) => t.categoryId === selectedCategory)
+      : threads;
 
   // Sort by lastActivity descending
-  const sortedThreads = [...filteredThreads].sort(
-    (a, b) => b.lastActivity - a.lastActivity,
+  const sortedThreads = [...filteredThreads].sort((a, b) =>
+    Number(b.lastActivity - a.lastActivity),
   );
 
-  function handleCreateThread() {
+  async function handleCreateThread() {
     if (!newTitle.trim()) {
       toast.error("Thread title is required");
       return;
@@ -224,12 +200,23 @@ export default function CatalogPage() {
       toast.error("Please select a category");
       return;
     }
-    createThread(newTitle.trim(), Number.parseInt(newCategoryId));
-    toast.success("Thread created");
-    setShowNewThread(false);
-    setNewTitle("");
-    setNewCategoryId("");
-    loadData();
+    setCreating(true);
+    try {
+      await backendApi.createThread(
+        newTitle.trim(),
+        BigInt(newCategoryId),
+        sessionId,
+      );
+      toast.success("Thread created");
+      setShowNewThread(false);
+      setNewTitle("");
+      setNewCategoryId("");
+      await loadData();
+    } catch {
+      toast.error("Failed to create thread");
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -244,7 +231,7 @@ export default function CatalogPage() {
             /board/
           </h1>
           <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>
-            {sortedThreads.length} active threads
+            {loading ? "Loading…" : `${sortedThreads.length} active threads`}
           </p>
         </div>
         <Button
@@ -283,7 +270,7 @@ export default function CatalogPage() {
           return (
             <button
               type="button"
-              key={cat.id}
+              key={String(cat.id)}
               className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
               style={{
                 backgroundColor: active ? `${color}22` : "#1a1a1a",
@@ -299,8 +286,16 @@ export default function CatalogPage() {
         })}
       </div>
 
-      {/* Thread grid */}
-      {sortedThreads.length === 0 ? (
+      {/* Loading state */}
+      {loading ? (
+        <div
+          className="text-center py-20"
+          style={{ color: "#444" }}
+          data-ocid="catalog.thread.loading_state"
+        >
+          <p className="font-mono text-sm">Loading threads…</p>
+        </div>
+      ) : sortedThreads.length === 0 ? (
         <div
           className="text-center py-20"
           style={{ color: "#444" }}
@@ -313,10 +308,9 @@ export default function CatalogPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {sortedThreads.map((thread, i) => (
             <ThreadCard
-              key={thread.id}
+              key={String(thread.id)}
               thread={thread}
               categories={categories}
-              userCounts={userCounts}
               index={i + 1}
               onClick={() =>
                 navigate({
@@ -398,7 +392,7 @@ export default function CatalogPage() {
                 >
                   {categories.map((cat) => (
                     <SelectItem
-                      key={cat.id}
+                      key={String(cat.id)}
                       value={String(cat.id)}
                       className="font-mono text-sm"
                       style={{ color: "#e0e0e0" }}
@@ -418,6 +412,7 @@ export default function CatalogPage() {
               className="font-mono text-xs"
               style={{ color: "#888" }}
               data-ocid="new_thread.cancel_button"
+              disabled={creating}
             >
               Cancel
             </Button>
@@ -428,9 +423,10 @@ export default function CatalogPage() {
                 backgroundColor: "#4a9e5c",
                 color: "#0d0d0d",
               }}
+              disabled={creating}
               data-ocid="new_thread.submit_button"
             >
-              Create Thread
+              {creating ? "Creating…" : "Create Thread"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -8,14 +8,13 @@ import {
   createRouter,
   useRouterState,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { seedCategories } from "./backendApi";
 import AdminPage from "./pages/AdminPage";
 import ArchivePage from "./pages/ArchivePage";
 import CatalogPage from "./pages/CatalogPage";
 import ThreadPage from "./pages/ThreadPage";
-import { getSessionId, seedIfNeeded } from "./store";
-
-// Seed data on first load
-seedIfNeeded();
+import { getSessionId } from "./store";
 
 // ─── Header ───────────────────────────────────────────────────
 function Header() {
@@ -173,5 +172,10 @@ declare module "@tanstack/react-router" {
 }
 
 export default function App() {
+  // Fire-and-forget: seed backend categories on first load
+  useEffect(() => {
+    seedCategories();
+  }, []);
+
   return <RouterProvider router={router} />;
 }

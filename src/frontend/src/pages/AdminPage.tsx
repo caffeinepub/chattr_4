@@ -9,31 +9,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  type Ban,
-  type Category,
-  type Post,
-  type Thread,
-  addCategory,
-  banUser,
-  deleteCategory,
-  deletePost,
-  deleteThread,
-  getBans,
-  getCategories,
-  getPosts,
-  getThreads,
-  saveCategories,
-  unbanUser,
-  updateThread,
-} from "../store";
+import * as backendApi from "../backendApi";
+import type { Ban, Category, Post, Thread } from "../backendApi";
 
 const ADMIN_PASSWORD = "lunasimbaliamsammy123";
 
-function timeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
+function timeAgo(tsMs: number): string {
+  const diff = Date.now() - tsMs;
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -113,12 +97,23 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
 
 // ─── Threads Tab ─────────────────────────────────────────────
 function ThreadsTab() {
-  const [threads, setThreads] = useState<Thread[]>(() => getThreads());
-  const categories = getCategories();
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  const refresh = () => setThreads(getThreads());
+  const refresh = useCallback(async () => {
+    const [t, c] = await Promise.all([
+      backendApi.getAllThreads(),
+      backendApi.getCategories(),
+    ]);
+    setThreads(t);
+    setCategories(c);
+  }, []);
 
-  function getCatName(id: number) {
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  function getCatName(id: bigint) {
     return categories.find((c) => c.id === id)?.name ?? "?";
   }
 
@@ -148,7 +143,7 @@ function ThreadsTab() {
           <TableBody>
             {threads.map((thread, i) => (
               <TableRow
-                key={thread.id}
+                key={String(thread.id)}
                 style={{ borderColor: "#1a1a1a" }}
                 data-ocid={`admin.thread.row.${i + 1}`}
               >
@@ -168,7 +163,7 @@ function ThreadsTab() {
                   className="font-mono text-xs"
                   style={{ color: "#888" }}
                 >
-                  {thread.postCount}
+                  {Number(thread.postCount)}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1 flex-wrap">
@@ -211,8 +206,12 @@ function ThreadsTab() {
                         type="button"
                         className="font-mono text-xs px-2 py-1 rounded transition-colors"
                         style={{ border: "1px solid #444", color: "#888" }}
-                        onClick={() => {
-                          updateThread(thread.id, { isClosed: true });
+                        onClick={async () => {
+                          await backendApi.updateThread(
+                            thread.id,
+                            true,
+                            thread.isArchived,
+                          );
                           toast.success("Thread closed");
                           refresh();
                         }}
@@ -229,8 +228,12 @@ function ThreadsTab() {
                           border: "1px solid #4a9e5c44",
                           color: "#4a9e5c",
                         }}
-                        onClick={() => {
-                          updateThread(thread.id, { isClosed: false });
+                        onClick={async () => {
+                          await backendApi.updateThread(
+                            thread.id,
+                            false,
+                            false,
+                          );
                           toast.success("Thread reopened");
                           refresh();
                         }}
@@ -244,11 +247,8 @@ function ThreadsTab() {
                         type="button"
                         className="font-mono text-xs px-2 py-1 rounded transition-colors"
                         style={{ border: "1px solid #55555544", color: "#777" }}
-                        onClick={() => {
-                          updateThread(thread.id, {
-                            isArchived: true,
-                            isClosed: true,
-                          });
+                        onClick={async () => {
+                          await backendApi.updateThread(thread.id, true, true);
                           toast.success("Thread archived");
                           refresh();
                         }}
@@ -257,24 +257,6 @@ function ThreadsTab() {
                         Archive
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="font-mono text-xs px-2 py-1 rounded transition-colors"
-                      style={{
-                        border: "1px solid #c0392b44",
-                        color: "#c0392b",
-                      }}
-                      onClick={() => {
-                        if (confirm("Delete this thread and all its posts?")) {
-                          deleteThread(thread.id);
-                          toast.success("Thread deleted");
-                          refresh();
-                        }
-                      }}
-                      data-ocid="admin.thread.delete_button"
-                    >
-                      Delete
-                    </button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -288,20 +270,21 @@ function ThreadsTab() {
 
 // ─── Posts Tab ────────────────────────────────────────────────
 function PostsTab() {
-  const [posts, setPosts] = useState<Post[]>(() =>
-    getPosts()
-      .filter((p) => !p.isDeleted)
-      .slice(-50)
-      .reverse(),
-  );
+  const [posts, setPosts] = useState<Post[]>([]);
 
-  const refresh = () =>
-    setPosts(
-      getPosts()
-        .filter((p) => !p.isDeleted)
-        .slice(-50)
-        .reverse(),
-    );
+  const refresh = useCallback(async () => {
+    const all = await backendApi.getAllPosts();
+    // Show last 50 non-deleted posts, newest first
+    const filtered = all
+      .filter((p) => !p.isDeleted)
+      .sort((a, b) => Number(b.createdAt - a.createdAt))
+      .slice(0, 50);
+    setPosts(filtered);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return (
     <div>
@@ -329,7 +312,7 @@ function PostsTab() {
           <TableBody>
             {posts.map((post, i) => (
               <TableRow
-                key={post.id}
+                key={String(post.id)}
                 style={{ borderColor: "#1a1a1a" }}
                 data-ocid={`admin.post.row.${i + 1}`}
               >
@@ -343,7 +326,7 @@ function PostsTab() {
                   className="font-mono text-xs"
                   style={{ color: "#888" }}
                 >
-                  #{post.threadId}
+                  #{String(post.threadId)}
                 </TableCell>
                 <TableCell
                   className="text-sm max-w-xs truncate"
@@ -355,15 +338,15 @@ function PostsTab() {
                   className="font-mono text-xs"
                   style={{ color: "#555" }}
                 >
-                  {timeAgo(post.createdAt)}
+                  {timeAgo(backendApi.nsToMs(post.createdAt))}
                 </TableCell>
                 <TableCell>
                   <button
                     type="button"
                     className="font-mono text-xs px-2 py-1 rounded"
                     style={{ border: "1px solid #c0392b44", color: "#c0392b" }}
-                    onClick={() => {
-                      deletePost(post.id);
+                    onClick={async () => {
+                      await backendApi.deletePost(post.id);
                       toast.success("Post deleted");
                       refresh();
                     }}
@@ -383,19 +366,29 @@ function PostsTab() {
 
 // ─── Bans Tab ─────────────────────────────────────────────────
 function BansTab() {
-  const [bans, setBans] = useState<Ban[]>(() => getBans());
+  const [bans, setBans] = useState<Ban[]>([]);
   const [banId, setBanId] = useState("");
   const [banReason, setBanReason] = useState("");
 
-  const refresh = () => setBans(getBans());
+  const refresh = useCallback(async () => {
+    const b = await backendApi.getBans();
+    setBans(b);
+  }, []);
 
-  function handleBan(e: React.FormEvent) {
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handleBan(e: React.FormEvent) {
     e.preventDefault();
     if (!banId.trim()) {
       toast.error("User ID required");
       return;
     }
-    banUser(banId.trim(), banReason.trim() || "Violating board rules");
+    await backendApi.banUser(
+      banId.trim(),
+      banReason.trim() || "Violating board rules",
+    );
     toast.success(`${banId} banned`);
     setBanId("");
     setBanReason("");
@@ -502,15 +495,15 @@ function BansTab() {
                   className="font-mono text-xs"
                   style={{ color: "#555" }}
                 >
-                  {timeAgo(ban.timestamp)}
+                  {timeAgo(backendApi.nsToMs(ban.timestamp))}
                 </TableCell>
                 <TableCell>
                   <button
                     type="button"
                     className="font-mono text-xs px-2 py-1 rounded"
                     style={{ border: "1px solid #4a9e5c44", color: "#4a9e5c" }}
-                    onClick={() => {
-                      unbanUser(ban.displayId);
+                    onClick={async () => {
+                      await backendApi.unbanUser(ban.displayId);
                       toast.success(`${ban.displayId} unbanned`);
                       refresh();
                     }}
@@ -530,20 +523,25 @@ function BansTab() {
 
 // ─── Categories Tab ───────────────────────────────────────────
 function CategoriesTab() {
-  const [categories, setCategories] = useState<Category[]>(() =>
-    getCategories(),
-  );
+  const [categories, setCategories] = useState<Category[]>([]);
   const [newCatName, setNewCatName] = useState("");
 
-  const refresh = () => setCategories(getCategories());
+  const refresh = useCallback(async () => {
+    const cats = await backendApi.getCategories();
+    setCategories(cats);
+  }, []);
 
-  function handleAdd(e: React.FormEvent) {
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!newCatName.trim()) {
       toast.error("Category name required");
       return;
     }
-    addCategory(newCatName.trim());
+    await backendApi.addCategory(newCatName.trim());
     toast.success(`Category "${newCatName}" added`);
     setNewCatName("");
     refresh();
@@ -597,7 +595,7 @@ function CategoriesTab() {
       <div className="space-y-2">
         {categories.map((cat, i) => (
           <div
-            key={cat.id}
+            key={String(cat.id)}
             className="flex items-center justify-between px-3 py-2 rounded"
             style={{ backgroundColor: "#141414", border: "1px solid #1a1a1a" }}
             data-ocid={`admin.category.row.${i + 1}`}
@@ -609,9 +607,9 @@ function CategoriesTab() {
               type="button"
               className="font-mono text-xs px-2 py-1 rounded"
               style={{ border: "1px solid #c0392b44", color: "#c0392b" }}
-              onClick={() => {
+              onClick={async () => {
                 if (confirm(`Delete category "${cat.name}"?`)) {
-                  deleteCategory(cat.id);
+                  await backendApi.deleteCategory(cat.id);
                   toast.success(`Category "${cat.name}" deleted`);
                   refresh();
                 }

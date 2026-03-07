@@ -19,19 +19,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import * as backendApi from "../backendApi";
+import type { Category, Post, Thread } from "../backendApi";
 import {
-  type Category,
   type MediaType,
-  type Post,
-  type Thread,
-  createPost,
   detectMediaType,
-  getCategories,
-  getPostsByThread,
-  getPresenceCount,
   getSessionId,
-  getThread,
-  isBanned,
   isThreadLive,
   joinThread,
   leaveThread,
@@ -53,15 +46,15 @@ declare global {
 // Helpers
 // ──────────────────────────────────────────────
 
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("en-US", {
+function formatTime(tsMs: number): string {
+  return new Date(tsMs).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function timeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
+function timeAgo(tsMs: number): string {
+  const diff = Date.now() - tsMs;
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -557,6 +550,9 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
   const sessionId = getSessionId();
   const isOwn = post.authorDisplayId === sessionId;
   const avatarSrc = generatePixelAvatar(post.authorDisplayId, 28);
+  const createdAtMs = backendApi.nsToMs(post.createdAt);
+  // mediaType from backend is a string; treat it as MediaType
+  const mediaType = post.mediaType as MediaType;
 
   if (post.isDeleted) {
     return (
@@ -574,10 +570,9 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
     );
   }
 
-  const hasMedia = !!post.mediaUrl && post.mediaType !== "text";
+  const hasMedia = !!post.mediaUrl && mediaType !== "text";
   const isInlineImage =
-    post.mediaUrl &&
-    (post.mediaType === "uploaded_image" || post.mediaType === "image");
+    post.mediaUrl && (mediaType === "uploaded_image" || mediaType === "image");
 
   const avatarEl = (
     <img
@@ -648,7 +643,7 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
         {hasMedia && !isInlineImage && (
           <CollapsibleMedia
             url={post.mediaUrl!}
-            mediaType={post.mediaType}
+            mediaType={mediaType}
             index={index}
             isOwn={isOwn}
           />
@@ -659,7 +654,7 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
           className={`font-mono text-[10px] mt-1 ${isOwn ? "text-right" : "text-left"}`}
           style={{ color: isOwn ? "#6abd7c88" : "#555" }}
         >
-          {formatTime(post.createdAt)} · {timeAgo(post.createdAt)}
+          {formatTime(createdAtMs)} · {timeAgo(createdAtMs)}
         </div>
       </div>
     </div>
@@ -672,15 +667,17 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
 export default function ThreadPage() {
   const { id } = useParams({ strict: false }) as { id?: string };
   const navigate = useNavigate();
-  const threadId = Number.parseInt(id ?? "0");
+  // Thread ID from URL is a string — convert to bigint
+  const threadIdBig = BigInt(id ?? "0");
+  const threadIdNum = Number(threadIdBig);
 
-  const [thread, setThread] = useState<Thread | undefined>(undefined);
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [content, setContent] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaType, setMediaType] = useState<MediaType>("text");
-  const [userCount, setUserCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showMediaInput, setShowMediaInput] = useState(false);
 
@@ -703,16 +700,21 @@ export default function ThreadPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  const loadData = useCallback(() => {
-    const t = getThread(threadId);
-    setThread(t);
-    const newPosts = getPostsByThread(threadId);
+  const loadData = useCallback(async () => {
+    const [t, newPosts, cats] = await Promise.all([
+      backendApi.getThread(threadIdBig),
+      backendApi.getPostsByThread(threadIdBig),
+      backendApi.getCategories(),
+    ]);
+
+    if (t === null) {
+      setNotFound(true);
+    } else {
+      setThread(t);
+    }
     setPosts(newPosts);
-    setCategories(getCategories());
-    const presence = getPresenceCount(threadId);
-    const simCount = presence + Math.floor(Math.random() * 3);
-    setUserCount(simCount);
-  }, [threadId]);
+    setCategories(cats);
+  }, [threadIdBig]);
 
   // Auto-scroll when new posts arrive
   useEffect(() => {
@@ -724,20 +726,20 @@ export default function ThreadPage() {
 
   useEffect(() => {
     loadData();
-    joinThread(threadId, sessionId);
+    joinThread(threadIdNum, sessionId);
 
     heartbeatRef.current = setInterval(() => {
-      joinThread(threadId, sessionId);
+      joinThread(threadIdNum, sessionId);
     }, 15000);
 
-    pollRef.current = setInterval(loadData, 5000);
+    pollRef.current = setInterval(loadData, 3000);
 
     return () => {
-      leaveThread(threadId, sessionId);
+      leaveThread(threadIdNum, sessionId);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [threadId, sessionId, loadData]);
+  }, [threadIdNum, sessionId, loadData]);
 
   // Scroll on mount
   useEffect(() => {
@@ -831,14 +833,16 @@ export default function ThreadPage() {
       return;
     }
 
-    if (isBanned(sessionId)) {
+    // Check ban status via backend
+    const banned = await backendApi.isBanned(sessionId);
+    if (banned) {
       toast.error("You are banned from posting.");
       return;
     }
 
     setSubmitting(true);
     try {
-      let finalMediaUrl: string | undefined;
+      let finalMediaUrl: string | null = null;
       let finalMediaType: MediaType = "text";
 
       if (uploadedImage) {
@@ -849,13 +853,21 @@ export default function ThreadPage() {
         finalMediaType = mediaType;
       }
 
-      createPost(threadId, content.trim(), finalMediaUrl, finalMediaType);
+      await backendApi.createPost(
+        threadIdBig,
+        sessionId,
+        content.trim(),
+        finalMediaUrl,
+        finalMediaType,
+      );
       setContent("");
       setMediaUrl("");
       setMediaType("text");
       setShowMediaInput(false);
       setUploadedImage(null);
-      loadData();
+      await loadData();
+    } catch {
+      toast.error("Failed to send message");
     } finally {
       setSubmitting(false);
     }
@@ -869,7 +881,7 @@ export default function ThreadPage() {
   }
 
   // ── Thread not found ──
-  if (thread === undefined && !getThread(threadId)) {
+  if (notFound) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center">
         <p className="font-mono text-sm" style={{ color: "#444" }}>
@@ -887,13 +899,24 @@ export default function ThreadPage() {
     );
   }
 
-  if (!thread) return null;
+  if (!thread) {
+    return (
+      <div
+        className="flex items-center justify-center h-full"
+        data-ocid="thread.loading_state"
+      >
+        <p className="font-mono text-sm" style={{ color: "#444" }}>
+          Loading…
+        </p>
+      </div>
+    );
+  }
 
   const category = categories.find((c) => c.id === thread.categoryId);
   const catColor = category
     ? (CATEGORY_COLORS[category.name] ?? "#555")
     : "#555";
-  const live = isThreadLive(threadId) || userCount > 0;
+  const live = isThreadLive(threadIdNum);
 
   return (
     /* Full-height chatroom — main element is flex-1 overflow-hidden */
@@ -968,7 +991,7 @@ export default function ThreadPage() {
             </div>
           </div>
 
-          {/* Live indicator + user count */}
+          {/* Live indicator + post count */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span
               className={live ? "animate-pulse" : ""}
@@ -991,7 +1014,7 @@ export default function ThreadPage() {
               className="font-mono text-[10px] ml-1"
               style={{ color: "#555" }}
             >
-              {userCount}
+              {Number(thread.postCount)}
             </span>
           </div>
         </div>
@@ -1049,7 +1072,7 @@ export default function ThreadPage() {
           ) : (
             <>
               {posts.map((post, i) => (
-                <ChatBubble key={post.id} post={post} index={i + 1} />
+                <ChatBubble key={String(post.id)} post={post} index={i + 1} />
               ))}
             </>
           )}

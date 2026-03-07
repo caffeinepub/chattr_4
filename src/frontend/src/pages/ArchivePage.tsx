@@ -1,14 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import {
-  type Category,
-  type Thread,
-  getCategories,
-  getThreads,
-} from "../store";
+import * as backendApi from "../backendApi";
+import type { Category, Thread } from "../backendApi";
 
-function timeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
+function timeAgo(tsMs: number): string {
+  const diff = Date.now() - tsMs;
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -39,6 +35,7 @@ function ArchiveCard({ thread, categories, index, onClick }: ArchiveCardProps) {
   const catColor = category
     ? (CATEGORY_COLORS[category.name] ?? "#555")
     : "#555";
+  const lastActivityMs = backendApi.nsToMs(thread.lastActivity);
 
   return (
     <div
@@ -98,14 +95,14 @@ function ArchiveCard({ thread, categories, index, onClick }: ArchiveCardProps) {
 
       <div className="flex items-center justify-between">
         <span className="font-mono text-xs" style={{ color: "#444" }}>
-          {thread.postCount} posts
+          {Number(thread.postCount)} posts
         </span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs" style={{ color: "#333" }}>
             {thread.creatorDisplayId}
           </span>
           <span className="font-mono text-xs" style={{ color: "#2a2a2a" }}>
-            {timeAgo(thread.lastActivity)}
+            {timeAgo(lastActivityMs)}
           </span>
         </div>
       </div>
@@ -117,22 +114,31 @@ export default function ArchivePage() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<Thread[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<bigint | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(() => {
-    setCategories(getCategories());
-    setArchivedThreads(getThreads().filter((t) => t.isArchived || t.isClosed));
+  const loadData = useCallback(async () => {
+    const [cats, threads] = await Promise.all([
+      backendApi.getCategories(),
+      backendApi.getArchivedThreads(),
+    ]);
+    setCategories(cats);
+    setArchivedThreads(threads);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const filtered = selectedCategory
-    ? archivedThreads.filter((t) => t.categoryId === selectedCategory)
-    : archivedThreads;
+  const filtered =
+    selectedCategory !== null
+      ? archivedThreads.filter((t) => t.categoryId === selectedCategory)
+      : archivedThreads;
 
-  const sorted = [...filtered].sort((a, b) => b.lastActivity - a.lastActivity);
+  const sorted = [...filtered].sort((a, b) =>
+    Number(b.lastActivity - a.lastActivity),
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
@@ -145,7 +151,9 @@ export default function ArchivePage() {
           /archive/
         </h1>
         <p className="font-mono text-xs mt-1" style={{ color: "#444" }}>
-          {sorted.length} archived threads — read-only
+          {loading
+            ? "Loading…"
+            : `${sorted.length} archived threads — read-only`}
         </p>
       </div>
 
@@ -171,7 +179,7 @@ export default function ArchivePage() {
           return (
             <button
               type="button"
-              key={cat.id}
+              key={String(cat.id)}
               className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
               style={{
                 backgroundColor: active ? `${color}15` : "#141414",
@@ -198,7 +206,15 @@ export default function ArchivePage() {
       </div>
 
       {/* Thread list */}
-      {sorted.length === 0 ? (
+      {loading ? (
+        <div
+          className="text-center py-20"
+          style={{ color: "#333" }}
+          data-ocid="archive.thread.loading_state"
+        >
+          <p className="font-mono text-sm">Loading archive…</p>
+        </div>
+      ) : sorted.length === 0 ? (
         <div
           className="text-center py-20"
           style={{ color: "#333" }}
@@ -210,7 +226,7 @@ export default function ArchivePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {sorted.map((thread, i) => (
             <ArchiveCard
-              key={thread.id}
+              key={String(thread.id)}
               thread={thread}
               categories={categories}
               index={i + 1}

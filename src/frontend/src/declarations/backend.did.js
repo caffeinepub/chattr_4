@@ -19,6 +19,33 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
+export const Ban = IDL.Record({
+  'timestamp' : IDL.Int,
+  'displayId' : IDL.Text,
+  'reason' : IDL.Text,
+});
+export const Post = IDL.Record({
+  'id' : IDL.Nat,
+  'isDeleted' : IDL.Bool,
+  'content' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'mediaUrl' : IDL.Opt(IDL.Text),
+  'authorDisplayId' : IDL.Text,
+  'mediaType' : IDL.Text,
+  'threadId' : IDL.Nat,
+});
+export const Thread = IDL.Record({
+  'id' : IDL.Nat,
+  'categoryId' : IDL.Nat,
+  'postCount' : IDL.Nat,
+  'title' : IDL.Text,
+  'lastActivity' : IDL.Int,
+  'createdAt' : IDL.Int,
+  'creatorDisplayId' : IDL.Text,
+  'isClosed' : IDL.Bool,
+  'isArchived' : IDL.Bool,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -47,6 +74,30 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  'addCategory' : IDL.Func([IDL.Text], [Category], []),
+  'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
+  'createPost' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+      [Post],
+      [],
+    ),
+  'createThread' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Thread], []),
+  'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'deletePost' : IDL.Func([IDL.Nat], [Post], []),
+  'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+  'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+  'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+  'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
+  'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
+  'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
+  'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
+  'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+  'initialize' : IDL.Func([], [], []),
+  'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'logAction' : IDL.Func([IDL.Text], [], []),
+  'start' : IDL.Func([], [], []),
+  'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
 });
 
 export const idlInitArgs = [];
@@ -62,6 +113,33 @@ export const idlFactory = ({ IDL }) => {
   const _CaffeineStorageRefillResult = IDL.Record({
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
+  const Ban = IDL.Record({
+    'timestamp' : IDL.Int,
+    'displayId' : IDL.Text,
+    'reason' : IDL.Text,
+  });
+  const Post = IDL.Record({
+    'id' : IDL.Nat,
+    'isDeleted' : IDL.Bool,
+    'content' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'mediaUrl' : IDL.Opt(IDL.Text),
+    'authorDisplayId' : IDL.Text,
+    'mediaType' : IDL.Text,
+    'threadId' : IDL.Nat,
+  });
+  const Thread = IDL.Record({
+    'id' : IDL.Nat,
+    'categoryId' : IDL.Nat,
+    'postCount' : IDL.Nat,
+    'title' : IDL.Text,
+    'lastActivity' : IDL.Int,
+    'createdAt' : IDL.Int,
+    'creatorDisplayId' : IDL.Text,
+    'isClosed' : IDL.Bool,
+    'isArchived' : IDL.Bool,
   });
   
   return IDL.Service({
@@ -91,6 +169,30 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    'addCategory' : IDL.Func([IDL.Text], [Category], []),
+    'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
+    'createPost' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [Post],
+        [],
+      ),
+    'createThread' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Thread], []),
+    'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'deletePost' : IDL.Func([IDL.Nat], [Post], []),
+    'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+    'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+    'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+    'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
+    'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
+    'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
+    'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
+    'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
+    'initialize' : IDL.Func([], [], []),
+    'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'logAction' : IDL.Func([IDL.Text], [], []),
+    'start' : IDL.Func([], [], []),
+    'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
   });
 };
 
