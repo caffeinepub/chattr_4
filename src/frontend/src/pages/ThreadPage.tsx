@@ -31,6 +31,8 @@ import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { Category, Post, Thread, UserProfile } from "../backendApi";
 import GifPicker from "../components/GifPicker";
+import VoiceMessagePlayer from "../components/VoiceMessagePlayer";
+import VoiceRecorder from "../components/VoiceRecorder";
 import {
   type MediaType,
   detectMediaType,
@@ -40,13 +42,17 @@ import {
   leaveThread,
 } from "../store";
 import {
-  addReaction,
-  getReactionCounts,
-  getReactions,
+  aggregateReactions,
+  buildReplyMapFromPosts,
+  encodeReactionContent,
+  encodeReplyContent,
+  indexMyReactions,
+  parseReactionContent,
+  parseReplyContent,
+} from "../utils/backendReactions";
+import {
   getReplyMap,
-  hasReaction,
   recordThreadVisit,
-  removeReaction,
   storeReply,
 } from "../utils/localReactions";
 import { generatePixelAvatar } from "../utils/pixelAvatar";
@@ -835,7 +841,10 @@ function LinkPreviewCard({
 // ──────────────────────────────────────────────
 function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
   const configs: Record<
-    Exclude<MediaType, "text" | "uploaded_image" | "gif">,
+    Exclude<
+      MediaType,
+      "text" | "uploaded_image" | "gif" | "voice" | "reaction"
+    >,
     { icon: React.ReactNode; label: string; color: string }
   > = {
     youtube: {
@@ -907,7 +916,9 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
   if (
     mediaType === "text" ||
     mediaType === "uploaded_image" ||
-    mediaType === "gif"
+    mediaType === "gif" ||
+    mediaType === "voice" ||
+    mediaType === "reaction"
   )
     return null;
   const cfg = configs[mediaType];
@@ -1112,6 +1123,10 @@ interface ReactionRowProps {
   postId: string;
   sessionId: string;
   isOwn: boolean;
+  /** Aggregated reaction counts for this post (from backend posts) */
+  counts: Record<string, number>;
+  /** Map of emoji → reaction-post-id for the current user's reactions on this post */
+  myReactions: Map<string, string>;
   /** Force re-render from parent */
   reactionVersion: number;
   onReactionChange: () => void;
@@ -1122,19 +1137,39 @@ function ReactionRow({
   postId,
   sessionId,
   isOwn,
+  counts,
+  myReactions,
   onReactionChange,
 }: ReactionRowProps) {
   const [showPicker, setShowPicker] = useState(false);
-  const counts = getReactionCounts(threadId, postId);
   const activeEmojis = REACTION_EMOJIS.filter((e) => (counts[e] ?? 0) > 0);
 
-  function toggleReaction(emoji: string) {
-    if (hasReaction(threadId, postId, sessionId, emoji)) {
-      removeReaction(threadId, postId, sessionId, emoji);
-    } else {
-      addReaction(threadId, postId, sessionId, emoji);
-    }
+  async function toggleReaction(emoji: string) {
     setShowPicker(false);
+    const existingPostId = myReactions.get(emoji);
+    if (existingPostId) {
+      // Remove: delete the reaction post
+      try {
+        await backendApi.deletePost(BigInt(existingPostId));
+      } catch {
+        // ignore — will resync on next poll
+      }
+    } else {
+      // Add: create a reaction post
+      try {
+        const content = encodeReactionContent(sessionId, emoji, postId);
+        await backendApi.createPost(
+          BigInt(threadId),
+          sessionId,
+          content,
+          null,
+          "reaction",
+          null,
+        );
+      } catch {
+        // ignore
+      }
+    }
     onReactionChange();
   }
 
@@ -1145,7 +1180,7 @@ function ReactionRow({
       {/* Active reaction pills */}
       {activeEmojis.map((emoji) => {
         const count = counts[emoji] ?? 0;
-        const mine = hasReaction(threadId, postId, sessionId, emoji);
+        const mine = myReactions.has(emoji);
         return (
           <button
             type="button"
@@ -1208,7 +1243,7 @@ function ReactionRow({
                 onClick={() => toggleReaction(emoji)}
                 className="text-base leading-none p-1 rounded-lg transition-all hover:bg-white/10"
                 style={{
-                  filter: hasReaction(threadId, postId, sessionId, emoji)
+                  filter: myReactions.has(emoji)
                     ? "drop-shadow(0 0 4px #4a9e5c)"
                     : "none",
                 }}
@@ -1507,6 +1542,10 @@ interface ChatBubbleProps {
   replyMap: Record<string, string>;
   posts: Post[];
   reactionVersion: number;
+  /** Aggregated reaction counts: postId → emoji → count */
+  reactionMap: Map<string, Record<string, number>>;
+  /** My reactions index: postId → emoji → reaction-post-id */
+  myReactionIndex: Map<string, Map<string, string>>;
   onReactionChange: () => void;
   onContextMenu: (
     e: React.MouseEvent | { clientX: number; clientY: number },
@@ -1524,6 +1563,8 @@ function ChatBubble({
   replyMap,
   posts,
   reactionVersion,
+  reactionMap,
+  myReactionIndex,
   onReactionChange,
   onContextMenu,
 }: ChatBubbleProps) {
@@ -1595,8 +1636,12 @@ function ChatBubble({
     onContextMenu(e, post);
   }
 
-  // Reply reference
-  const replyToPostId = replyMap[postIdStr] ?? null;
+  // Parse reply reference and display content from post content
+  const { replyToPostId: embeddedReplyId, displayContent } = parseReplyContent(
+    post.content,
+  );
+  // Prefer backend-embedded reply ID, fall back to localStorage replyMap
+  const replyToPostId = embeddedReplyId ?? replyMap[postIdStr] ?? null;
   const replyToPost = replyToPostId
     ? posts.find((p) => String(p.id) === replyToPostId)
     : null;
@@ -1605,6 +1650,8 @@ function ChatBubble({
     : null;
   const replyAuthorName =
     replyAuthorProfile?.username ?? replyToPost?.authorSessionId ?? "";
+  // Display content with reply prefix stripped
+  const visibleContent = displayContent;
 
   if (post.isDeleted) {
     return (
@@ -1623,7 +1670,8 @@ function ChatBubble({
     );
   }
 
-  const hasMedia = !!post.mediaUrl && mediaType !== "text";
+  const hasMedia =
+    !!post.mediaUrl && mediaType !== "text" && mediaType !== "voice";
   const isInlineImage =
     post.mediaUrl &&
     (mediaType === "uploaded_image" ||
@@ -1719,20 +1767,32 @@ function ChatBubble({
                 style={{ color: "#888" }}
               >
                 {replyToPost.content
-                  ? replyToPost.content.slice(0, 80)
+                  ? parseReplyContent(replyToPost.content).displayContent.slice(
+                      0,
+                      80,
+                    )
                   : "[media]"}
               </p>
             </div>
           )}
 
           {/* Text content with @mention highlights */}
-          {post.content && (
+          {visibleContent && (
             <p
               className="text-sm leading-relaxed whitespace-pre-wrap break-words"
               style={{ color: isOwn ? "#d4edda" : "#e0e0e0" }}
             >
-              {renderMentions(post.content, myUsername)}
+              {renderMentions(visibleContent, myUsername)}
             </p>
+          )}
+
+          {/* Voice message player */}
+          {mediaType === "voice" && post.mediaUrl && (
+            <VoiceMessagePlayer
+              src={post.mediaUrl}
+              isOwn={isOwn}
+              durationMs={undefined}
+            />
           )}
 
           {/* Inline image thumbnail */}
@@ -1780,6 +1840,8 @@ function ChatBubble({
           postId={postIdStr}
           sessionId={sessionId}
           isOwn={isOwn}
+          counts={reactionMap.get(postIdStr) ?? {}}
+          myReactions={myReactionIndex.get(postIdStr) ?? new Map()}
           reactionVersion={reactionVersion}
           onReactionChange={onReactionChange}
         />
@@ -2153,11 +2215,19 @@ export default function ThreadPage() {
 
   const [thread, setThread] = useState<Thread | null>(null);
   const [notFound, setNotFound] = useState(false);
+  // Visible posts (reaction posts filtered out)
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [profileMap, setProfileMap] = useState<Map<string, UserProfile>>(
     new Map(),
   );
+  // Backend-derived reaction data
+  const [reactionMap, setReactionMap] = useState<
+    Map<string, Record<string, number>>
+  >(new Map());
+  const [myReactionIndex, setMyReactionIndex] = useState<
+    Map<string, Map<string, string>>
+  >(new Map());
   const [content, setContent] = useState("");
   const [inlineMediaUrl, setInlineMediaUrl] = useState("");
   const [inlineMediaType, setInlineMediaType] = useState<MediaType>("text");
@@ -2194,21 +2264,36 @@ export default function ThreadPage() {
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false);
 
+  // Voice recording state
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+
+  // ── Floating indicators state ──
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingMentionPostId, setPendingMentionPostId] = useState<
+    string | null
+  >(null);
+
   const sessionId = getSessionId();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevPostCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Use refs so scroll/poll callbacks always read current values without stale closures
+  const isAtBottomRef = useRef(true);
+  const myUsernameRef = useRef<string | undefined>(undefined);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setUnreadCount(0);
+    isAtBottomRef.current = true;
   }, []);
 
   const loadData = useCallback(async () => {
-    const [t, newPosts, cats, profiles] = await Promise.all([
+    const [t, rawPosts, cats, profiles] = await Promise.all([
       backendApi.getThread(threadIdBig),
       backendApi.getPostsByThread(threadIdBig),
       backendApi.getCategories(),
@@ -2220,30 +2305,76 @@ export default function ThreadPage() {
     } else {
       setThread(t);
     }
-    setPosts(newPosts);
+
+    // Split reaction posts from visible posts
+    const visiblePosts = rawPosts.filter(
+      (p) => p.mediaType !== "reaction" && !p.isDeleted,
+    );
+    // Keep deleted visible posts too (for tombstone display)
+    const visiblePostsWithDeleted = rawPosts.filter(
+      (p) => p.mediaType !== "reaction",
+    );
+
+    // ── Unread / mention tracking ──
+    const newTotal = visiblePostsWithDeleted.length;
+    const prevTotal = prevPostCountRef.current;
+    if (newTotal > prevTotal && !isAtBottomRef.current) {
+      const newPosts = visiblePostsWithDeleted.slice(prevTotal);
+      const countToAdd = newPosts.filter((p) => !p.isDeleted).length;
+      if (countToAdd > 0) {
+        setUnreadCount((c) => c + countToAdd);
+      }
+
+      // Check for @mentions of my username in the new posts
+      const username = myUsernameRef.current;
+      if (username) {
+        const mentionPattern = new RegExp(`@${username}\\b`, "i");
+        for (let i = newPosts.length - 1; i >= 0; i--) {
+          const p = newPosts[i];
+          if (!p.isDeleted && p.content && mentionPattern.test(p.content)) {
+            setPendingMentionPostId(String(p.id));
+            break;
+          }
+        }
+      }
+    }
+
+    setPosts(visiblePostsWithDeleted);
     setCategories(cats);
+
+    // Aggregate reactions from backend reaction posts
+    const newReactionMap = aggregateReactions(rawPosts);
+    setReactionMap(newReactionMap);
+
+    // Build my reaction index (for toggle state)
+    const newMyIndex = indexMyReactions(rawPosts, sessionId);
+    setMyReactionIndex(newMyIndex);
+
+    // Build reply map from backend post content (merged with localStorage fallback)
+    const backendReplyMap = buildReplyMapFromPosts(visiblePosts);
+    const localMap = getReplyMap();
+    setReplyMap({ ...localMap, ...backendReplyMap });
 
     const map = new Map<string, UserProfile>();
     for (const p of profiles) {
       map.set(p.sessionId, p);
     }
     setProfileMap(map);
-  }, [threadIdBig]);
+  }, [threadIdBig, sessionId]);
 
-  // Load reply map from localStorage
-  useEffect(() => {
-    setReplyMap(getReplyMap());
-  }, []);
+  // Reply map is loaded in loadData (merged from backend + localStorage)
 
   // Record thread visit for mention badge tracking
   useEffect(() => {
     recordThreadVisit(threadIdStr);
   }, [threadIdStr]);
 
-  // Auto-scroll when new posts arrive
+  // Auto-scroll when new posts arrive (only if user is at the bottom)
   useEffect(() => {
     if (posts.length > prevPostCountRef.current) {
-      scrollToBottom();
+      if (isAtBottomRef.current) {
+        scrollToBottom();
+      }
     }
     prevPostCountRef.current = posts.length;
   }, [posts.length, scrollToBottom]);
@@ -2270,6 +2401,45 @@ export default function ThreadPage() {
     const timer = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timer);
   }, [scrollToBottom]);
+
+  // Track scroll position for floating indicators
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    function handleScroll() {
+      if (!container) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      const atBottom = distanceFromBottom < 100;
+
+      if (atBottom !== isAtBottomRef.current) {
+        isAtBottomRef.current = atBottom;
+      }
+
+      if (atBottom) {
+        setUnreadCount(0);
+      }
+
+      // Check if mention post is now visible
+      if (pendingMentionPostId) {
+        const el = document.getElementById(`post-${pendingMentionPostId}`);
+        if (el) {
+          const elRect = el.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const isVisible =
+            elRect.top >= containerRect.top &&
+            elRect.bottom <= containerRect.bottom + 80;
+          if (isVisible) {
+            setPendingMentionPostId(null);
+          }
+        }
+      }
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [pendingMentionPostId]);
 
   // Close context menu on scroll
   useEffect(() => {
@@ -2298,6 +2468,8 @@ export default function ThreadPage() {
   // My username for mention highlights
   const myProfile = profileMap.get(sessionId);
   const myUsername = myProfile?.username;
+  // Keep ref in sync so loadData callback can always read the latest username
+  myUsernameRef.current = myUsername;
 
   function readFileAsBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -2457,6 +2629,30 @@ export default function ThreadPage() {
     });
   }
 
+  async function handleVoiceMessage(audioDataUrl: string, _durationMs: number) {
+    const banned = await backendApi.isBanned(sessionId);
+    if (banned) {
+      toast.error("You are banned from posting.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await backendApi.createPost(
+        threadIdBig,
+        sessionId,
+        "",
+        audioDataUrl,
+        "voice",
+        null,
+      );
+      await loadData();
+    } catch {
+      toast.error("Failed to send voice message");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const canSend =
     content.trim() !== "" || uploadedImage !== null || inlineMediaUrl !== "";
 
@@ -2511,21 +2707,26 @@ export default function ThreadPage() {
         }
       }
 
+      // Encode reply reference into content (backend-persisted)
+      const finalContent = replyToPost
+        ? encodeReplyContent(String(replyToPost.id), content.trim())
+        : content.trim();
+
       const newPost = await backendApi.createPost(
         threadIdBig,
         sessionId,
-        content.trim(),
+        finalContent,
         finalMediaUrl,
         finalMediaType,
         linkPreview,
       );
 
-      // Store reply mapping if replying
+      // Also store reply mapping in localStorage as fallback for old clients
       if (replyToPost && newPost) {
         const newPostId = String(newPost.id);
-        const replyToPostId = String(replyToPost.id);
-        storeReply(newPostId, replyToPostId);
-        setReplyMap((prev) => ({ ...prev, [newPostId]: replyToPostId }));
+        const replyToPostIdStr = String(replyToPost.id);
+        storeReply(newPostId, replyToPostIdStr);
+        setReplyMap((prev) => ({ ...prev, [newPostId]: replyToPostIdStr }));
       }
 
       setContent("");
@@ -2680,6 +2881,7 @@ export default function ThreadPage() {
 
       {/* ── Scrollable message list ──────────────────────── */}
       <div
+        ref={scrollContainerRef}
         className="flex-1 overflow-y-auto pt-4 relative"
         style={{
           paddingBottom: thread.isClosed ? "56px" : "8px",
@@ -2740,7 +2942,13 @@ export default function ThreadPage() {
                   replyMap={replyMap}
                   posts={posts}
                   reactionVersion={reactionVersion}
-                  onReactionChange={() => setReactionVersion((v) => v + 1)}
+                  reactionMap={reactionMap}
+                  myReactionIndex={myReactionIndex}
+                  onReactionChange={() => {
+                    setReactionVersion((v) => v + 1);
+                    // Reload data shortly after to pick up the new reaction post
+                    setTimeout(() => loadData(), 300);
+                  }}
                   onContextMenu={handleBubbleContextMenu}
                 />
               ))}
@@ -2748,6 +2956,81 @@ export default function ThreadPage() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* ── Floating indicators (Telegram-style) ── */}
+        {(unreadCount > 0 || pendingMentionPostId) && (
+          <div
+            style={{
+              position: "sticky",
+              bottom: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              alignItems: "flex-end",
+              paddingRight: 16,
+              pointerEvents: "none",
+              zIndex: 30,
+            }}
+          >
+            {/* @Mention button — stacked above unread button */}
+            {pendingMentionPostId && (
+              <button
+                type="button"
+                onClick={() => {
+                  scrollToPost(pendingMentionPostId);
+                  // Clear after a delay to allow scroll + visibility check to run
+                  setTimeout(() => {
+                    setPendingMentionPostId(null);
+                  }, 800);
+                }}
+                className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all"
+                style={{
+                  backgroundColor: "#1e1e1e",
+                  border: "1px solid #2a2a2a",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+                  pointerEvents: "auto",
+                  color: "#4a9e5c",
+                  cursor: "pointer",
+                }}
+                aria-label="Jump to mention"
+                data-ocid="thread.scroll_to_mention_button"
+              >
+                <span
+                  className="font-mono text-sm font-bold"
+                  style={{ color: "#4a9e5c" }}
+                >
+                  @
+                </span>
+              </button>
+            )}
+
+            {/* New messages button */}
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all"
+                style={{
+                  backgroundColor: "#1e1e1e",
+                  border: "1px solid #2a2a2a",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+                  pointerEvents: "auto",
+                  cursor: "pointer",
+                }}
+                aria-label={`${unreadCount} new message${unreadCount > 1 ? "s" : ""} — scroll to bottom`}
+                data-ocid="thread.scroll_to_bottom_button"
+              >
+                <ChevronDown size={16} style={{ color: "#4a9e5c" }} />
+                <span
+                  className="font-mono text-xs font-bold"
+                  style={{ color: "#ffffff" }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Fixed compose bar ────────────────────────────── */}
@@ -2957,41 +3240,55 @@ export default function ThreadPage() {
                 onChange={handleFileInputChange}
               />
 
-              {/* Text input */}
-              <Input
-                ref={inputRef}
-                placeholder={replyToPost ? "Write a reply…" : "Message…"}
-                value={content}
-                onChange={(e) => handleContentChange(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-                className="flex-1 h-10 border-0 focus-visible:ring-1 text-sm"
-                style={{
-                  backgroundColor: "#1e1e1e",
-                  color: "#e0e0e0",
-                  borderRadius: 20,
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  fontSize: 16,
-                }}
-                disabled={submitting}
-                data-ocid="thread.message_input"
-              />
+              {/* Text input — hidden while voice recording */}
+              {!isVoiceRecording && (
+                <Input
+                  ref={inputRef}
+                  placeholder={replyToPost ? "Write a reply…" : "Message…"}
+                  value={content}
+                  onChange={(e) => handleContentChange(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  className="flex-1 h-10 border-0 focus-visible:ring-1 text-sm"
+                  style={{
+                    backgroundColor: "#1e1e1e",
+                    color: "#e0e0e0",
+                    borderRadius: 20,
+                    paddingLeft: 16,
+                    paddingRight: 16,
+                    fontSize: 16,
+                  }}
+                  disabled={submitting}
+                  data-ocid="thread.message_input"
+                />
+              )}
 
-              {/* Send button */}
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || !canSend}
-                className="shrink-0 p-2.5 rounded-full transition-colors disabled:opacity-40"
-                style={{
-                  backgroundColor: canSend ? "#4a9e5c" : "#1e1e1e",
-                  color: canSend ? "#fff" : "#444",
-                }}
-                aria-label="Send message"
-                data-ocid="thread.send_button"
-              >
-                <SendHorizontal size={16} />
-              </button>
+              {/* While recording, show spacer so mic button stays right-aligned */}
+              {isVoiceRecording && <div className="flex-1" />}
+
+              {/* Send button (when there's content) OR Mic button (idle) */}
+              {canSend ? (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="shrink-0 p-2.5 rounded-full transition-colors disabled:opacity-40"
+                  style={{
+                    backgroundColor: "#4a9e5c",
+                    color: "#fff",
+                  }}
+                  aria-label="Send message"
+                  data-ocid="thread.send_button"
+                >
+                  <SendHorizontal size={16} />
+                </button>
+              ) : (
+                <VoiceRecorder
+                  disabled={submitting}
+                  onSend={handleVoiceMessage}
+                  onCancel={() => setIsVoiceRecording(false)}
+                  onRecordingStateChange={setIsVoiceRecording}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -14,7 +14,9 @@ export type MediaType =
   | "rumble"
   | "reddit"
   | "uploaded_image"
-  | "gif";
+  | "gif"
+  | "voice"
+  | "reaction";
 
 // ---------------------------------------------------------------
 // Session ID (localStorage only — not backend data)
