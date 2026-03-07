@@ -10,7 +10,6 @@ import {
   ImagePlus,
   Link2,
   Lock,
-  Paperclip,
   SendHorizontal,
   Tv2,
   Twitter,
@@ -204,21 +203,22 @@ function InlineImageThumbnail({
 
 // ──────────────────────────────────────────────
 // Twitter / X Embed (oEmbed approach)
+// Imperative DOM injection to avoid React re-render wiping the widget
 // ──────────────────────────────────────────────
 function TwitterEmbed({ url }: { url: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [embedHtml, setEmbedHtml] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  // Hide the injected blockquote until widgets.js has fully rendered the card
-  const [widgetReady, setWidgetReady] = useState(false);
+  const [status, setStatus] = useState<
+    "loading" | "injected" | "ready" | "error"
+  >("loading");
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(false);
-    setEmbedHtml(null);
-    setWidgetReady(false);
+    setStatus("loading");
+
+    // Clear any previously injected content
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+    }
 
     fetch(
       `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&theme=dark&omit_script=true`,
@@ -228,16 +228,50 @@ function TwitterEmbed({ url }: { url: string }) {
         return res.json() as Promise<{ html: string }>;
       })
       .then((data) => {
-        if (!cancelled) {
-          setEmbedHtml(data.html);
-          setLoading(false);
+        if (cancelled || !containerRef.current) return;
+
+        // Imperatively inject HTML — never touch this div with React again
+        containerRef.current.innerHTML = data.html;
+        setStatus("injected");
+
+        function activateWidgets() {
+          if (cancelled || !containerRef.current) return;
+          const twttr = window.twttr;
+          if (twttr?.widgets?.load) {
+            twttr.widgets
+              .load(containerRef.current)
+              .then(() => {
+                if (!cancelled) setStatus("ready");
+              })
+              .catch(() => {
+                if (!cancelled) setStatus("ready");
+              });
+          } else {
+            // Fallback: assume rendered after a short delay
+            setTimeout(() => {
+              if (!cancelled) setStatus("ready");
+            }, 2500);
+          }
+        }
+
+        const existingScript = document.getElementById(
+          "twitter-widgets-script",
+        );
+        if (!existingScript) {
+          const script = document.createElement("script");
+          script.id = "twitter-widgets-script";
+          script.src = "https://platform.twitter.com/widgets.js";
+          script.async = true;
+          script.charset = "utf-8";
+          script.onload = activateWidgets;
+          document.body.appendChild(script);
+        } else {
+          // Script already loaded — activate immediately (small delay for DOM settle)
+          setTimeout(activateWidgets, 50);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setError(true);
-          setLoading(false);
-        }
+        if (!cancelled) setStatus("error");
       });
 
     return () => {
@@ -245,86 +279,7 @@ function TwitterEmbed({ url }: { url: string }) {
     };
   }, [url]);
 
-  // After HTML is injected, activate widgets.js and wait for render
-  useEffect(() => {
-    if (!embedHtml || !containerRef.current) return;
-
-    let cancelled = false;
-
-    function activateWidgets() {
-      if (!containerRef.current || cancelled) return;
-      const promise = window.twttr?.widgets?.load(containerRef.current);
-      if (promise) {
-        promise
-          .then(() => {
-            if (!cancelled) setWidgetReady(true);
-          })
-          .catch(() => {
-            // If load promise rejects, show anyway to avoid stuck loading state
-            if (!cancelled) setWidgetReady(true);
-          });
-      } else {
-        // Fallback: no promise returned, just show after a short delay
-        setTimeout(() => {
-          if (!cancelled) setWidgetReady(true);
-        }, 1500);
-      }
-    }
-
-    if (!document.getElementById("twitter-widgets-script")) {
-      const script = document.createElement("script");
-      script.id = "twitter-widgets-script";
-      script.src = "https://platform.twitter.com/widgets.js";
-      script.async = true;
-      script.charset = "utf-8";
-      script.onload = () => activateWidgets();
-      document.body.appendChild(script);
-    } else {
-      // Script already loaded — wait a tick for DOM to settle then activate
-      const timer = setTimeout(activateWidgets, 50);
-      return () => {
-        cancelled = true;
-        clearTimeout(timer);
-      };
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [embedHtml]);
-
-  if (loading || (embedHtml && !widgetReady)) {
-    return (
-      <div
-        style={{
-          maxWidth: 320,
-          padding: "10px 12px",
-          borderRadius: 8,
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
-        }}
-      >
-        {/* Invisible container so widgets.js can render off-screen */}
-        {embedHtml && (
-          <div
-            ref={containerRef}
-            style={{
-              position: "absolute",
-              visibility: "hidden",
-              pointerEvents: "none",
-            }}
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted oEmbed HTML from Twitter
-            dangerouslySetInnerHTML={{ __html: embedHtml }}
-          />
-        )}
-        <span className="font-mono text-[11px]" style={{ color: "#555" }}>
-          Loading tweet…
-        </span>
-      </div>
-    );
-  }
-
-  if (error || !embedHtml) {
+  if (status === "error") {
     return (
       <a
         href={url}
@@ -339,12 +294,25 @@ function TwitterEmbed({ url }: { url: string }) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ maxWidth: 320, overflow: "hidden" }}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted oEmbed HTML from Twitter
-      dangerouslySetInnerHTML={{ __html: embedHtml }}
-    />
+    <div style={{ maxWidth: 320, minWidth: 260 }}>
+      {/* Loading placeholder — hidden once widget renders */}
+      {(status === "loading" || status === "injected") && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderRadius: 8,
+            backgroundColor: "#1a1a1a",
+            border: "1px solid #2a2a2a",
+          }}
+        >
+          <span className="font-mono text-[11px]" style={{ color: "#555" }}>
+            Loading tweet…
+          </span>
+        </div>
+      )}
+      {/* Container for imperatively injected oEmbed HTML — never re-rendered by React */}
+      <div ref={containerRef} />
+    </div>
   );
 }
 
@@ -773,12 +741,9 @@ export default function ThreadPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [content, setContent] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
-  const [mediaType, setMediaType] = useState<MediaType>("text");
   const [inlineMediaUrl, setInlineMediaUrl] = useState("");
   const [inlineMediaType, setInlineMediaType] = useState<MediaType>("text");
   const [submitting, setSubmitting] = useState(false);
-  const [showMediaInput, setShowMediaInput] = useState(false);
 
   // Image upload state
   const [uploadedImage, setUploadedImage] = useState<{
@@ -914,15 +879,6 @@ export default function ThreadPage() {
     }
   }
 
-  function handleMediaUrlChange(val: string) {
-    setMediaUrl(val);
-    if (val.trim()) {
-      setMediaType(detectMediaType(val));
-    } else {
-      setMediaType("text");
-    }
-  }
-
   function handleContentChange(val: string) {
     setContent(val);
     const found = extractFirstUrl(val);
@@ -936,10 +892,7 @@ export default function ThreadPage() {
   }
 
   const canSend =
-    content.trim() !== "" ||
-    mediaUrl.trim() !== "" ||
-    uploadedImage !== null ||
-    inlineMediaUrl !== "";
+    content.trim() !== "" || uploadedImage !== null || inlineMediaUrl !== "";
 
   async function handleSubmit() {
     if (!canSend) {
@@ -962,9 +915,6 @@ export default function ThreadPage() {
       if (uploadedImage) {
         finalMediaUrl = uploadedImage.dataUrl;
         finalMediaType = "uploaded_image";
-      } else if (mediaUrl.trim()) {
-        finalMediaUrl = mediaUrl.trim();
-        finalMediaType = mediaType;
       } else if (inlineMediaUrl) {
         finalMediaUrl = inlineMediaUrl;
         finalMediaType = inlineMediaType;
@@ -978,9 +928,6 @@ export default function ThreadPage() {
         finalMediaType,
       );
       setContent("");
-      setMediaUrl("");
-      setMediaType("text");
-      setShowMediaInput(false);
       setUploadedImage(null);
       setInlineMediaUrl("");
       setInlineMediaType("text");
@@ -1040,7 +987,7 @@ export default function ThreadPage() {
   return (
     /* Full-height chatroom — main element is flex-1 overflow-hidden */
     <div
-      className="flex flex-col h-full"
+      className="flex flex-col flex-1 min-h-0"
       style={{ backgroundColor: "#0d0d0d" }}
     >
       {/* ── Compact thread header ──────────────────────── */}
@@ -1067,6 +1014,12 @@ export default function ThreadPage() {
           {/* Thread info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
+              <h1
+                className="font-semibold text-sm leading-snug truncate"
+                style={{ color: "#e0e0e0" }}
+              >
+                {thread.title}
+              </h1>
               <span
                 className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
                 style={{
@@ -1101,12 +1054,6 @@ export default function ThreadPage() {
                   ARCHIVED
                 </span>
               )}
-              <h1
-                className="font-semibold text-sm leading-snug truncate"
-                style={{ color: "#e0e0e0" }}
-              >
-                {thread.title}
-              </h1>
             </div>
           </div>
 
@@ -1273,44 +1220,8 @@ export default function ThreadPage() {
               />
             )}
 
-            {/* Optional media URL row */}
-            {showMediaInput && (
-              <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
-                <Input
-                  placeholder="Paste media URL (YouTube, Twitch, X, image, video…)"
-                  value={mediaUrl}
-                  onChange={(e) => handleMediaUrlChange(e.target.value)}
-                  className="font-mono text-xs flex-1 h-8 border-0 focus-visible:ring-1"
-                  style={{
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                    borderRadius: 8,
-                  }}
-                  data-ocid="thread.media_url_input"
-                />
-                {mediaUrl && mediaType !== "text" && (
-                  <MediaTypeChip mediaType={mediaType} />
-                )}
-              </div>
-            )}
-
             {/* Main input row */}
             <div className="flex items-center gap-2 px-3 py-2.5">
-              {/* Media URL toggle */}
-              <button
-                type="button"
-                onClick={() => setShowMediaInput((v) => !v)}
-                className="shrink-0 p-2 rounded-full transition-colors"
-                style={{
-                  color: showMediaInput ? "#4a9e5c" : "#555",
-                  backgroundColor: showMediaInput ? "#4a9e5c18" : "transparent",
-                }}
-                aria-label="Toggle media URL input"
-                data-ocid="thread.media_toggle_button"
-              >
-                <Paperclip size={16} />
-              </button>
-
               {/* Image upload button */}
               <button
                 type="button"
@@ -1348,6 +1259,7 @@ export default function ThreadPage() {
                   borderRadius: 20,
                   paddingLeft: 16,
                   paddingRight: 16,
+                  fontSize: 16,
                 }}
                 disabled={submitting}
                 data-ocid="thread.message_input"

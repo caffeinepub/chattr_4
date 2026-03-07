@@ -24,11 +24,86 @@ export function nsToMs(ns: bigint): number {
   return Number(ns) / 1_000_000;
 }
 
+// ─── Canonical category list ──────────────────────────────────
+const CANONICAL_CATEGORIES = [
+  "General",
+  "Politics",
+  "Science",
+  "Technology",
+  "Entertainment",
+  "Sports",
+  "Gaming",
+  "Music",
+  "Art",
+  "Finance",
+  "Education",
+  "Religion",
+  "Random",
+];
+
 // ─── Seed / initialize ────────────────────────────────────────
 export async function seedCategories(): Promise<void> {
   try {
     const actor = await getActor();
     await actor.initialize();
+  } catch {
+    // Fire and forget — ignore errors
+  }
+}
+
+// ─── Sync categories to canonical list (idempotent) ───────────
+export async function syncCategoriesToCanonical(): Promise<void> {
+  try {
+    const actor = await getActor();
+    // Run initialize first in case it's a fresh canister
+    try {
+      await actor.initialize();
+    } catch {
+      /* ignore */
+    }
+
+    const existing = await actor.getCategories();
+
+    // Deduplicate: keep only the first occurrence of each name, delete the rest
+    const seenNames = new Set<string>();
+    for (const cat of existing) {
+      if (seenNames.has(cat.name)) {
+        // Duplicate — delete it
+        try {
+          await actor.deleteCategory(cat.id);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        seenNames.add(cat.name);
+      }
+    }
+
+    // Re-fetch after deduplication
+    const deduped = await actor.getCategories();
+    const existingNames = deduped.map((c) => c.name);
+
+    // Add missing canonical categories
+    for (const name of CANONICAL_CATEGORIES) {
+      if (!existingNames.includes(name)) {
+        try {
+          await actor.addCategory(name);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    // Remove categories not in canonical list
+    for (const cat of deduped) {
+      if (!CANONICAL_CATEGORIES.includes(cat.name)) {
+        try {
+          await actor.deleteCategory(cat.id);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   } catch {
     // Fire and forget — ignore errors
   }

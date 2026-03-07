@@ -20,14 +20,27 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { Category, Thread } from "../backendApi";
-import { getSessionId, isThreadLive } from "../store";
+import { getSessionId } from "../store";
+
+// A thread is considered "live" if it had activity within the last 10 minutes
+function isThreadLive(lastActivityNs: bigint): boolean {
+  const lastActivityMs = backendApi.nsToMs(lastActivityNs);
+  return Date.now() - lastActivityMs < 10 * 60 * 1000;
+}
 
 const CATEGORY_COLORS: Record<string, string> = {
+  General: "#5d7fa3",
   Politics: "#c0392b",
-  Art: "#8e44ad",
-  Entertainment: "#2980b9",
+  Science: "#16a085",
   Technology: "#27ae60",
+  Entertainment: "#2980b9",
   Sports: "#e67e22",
+  Gaming: "#9b59b6",
+  Music: "#e91e8c",
+  Art: "#8e44ad",
+  Finance: "#f39c12",
+  Education: "#1abc9c",
+  Religion: "#795548",
   Random: "#7f8c8d",
 };
 
@@ -70,9 +83,8 @@ function LiveDot({ live }: { live: boolean }) {
 }
 
 function ThreadCard({ thread, categories, index, onClick }: ThreadCardProps) {
-  const threadIdNum = Number(thread.id);
   const category = categories.find((c) => c.id === thread.categoryId);
-  const live = isThreadLive(threadIdNum);
+  const live = isThreadLive(thread.lastActivity);
   const catColor = category ? getCategoryColor(category.name) : "#555";
   const createdAtMs = backendApi.nsToMs(thread.createdAt);
 
@@ -228,10 +240,10 @@ export default function CatalogPage() {
             className="font-mono text-xl font-bold"
             style={{ color: "#e0e0e0" }}
           >
-            /board/
+            /chats/
           </h1>
           <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>
-            {loading ? "Loading…" : `${sortedThreads.length} active threads`}
+            {loading ? "Loading…" : `${sortedThreads.length} active chats`}
           </p>
         </div>
         <Button

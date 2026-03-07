@@ -9,7 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { seedCategories } from "./backendApi";
+import { syncCategoriesToCanonical } from "./backendApi";
 import AdminPage from "./pages/AdminPage";
 import ArchivePage from "./pages/ArchivePage";
 import CatalogPage from "./pages/CatalogPage";
@@ -25,7 +25,6 @@ function Header() {
   const navLinks = [
     { to: "/" as const, label: "Catalog" },
     { to: "/archive" as const, label: "Archive" },
-    { to: "/admin" as const, label: "Admin" },
   ];
 
   return (
@@ -36,19 +35,19 @@ function Header() {
         borderBottomColor: "#2a2a2a",
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 h-12 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
         {/* Site name */}
         <Link
           to="/"
-          className="font-mono text-lg font-bold tracking-tight transition-colors"
+          className="font-mono text-base sm:text-lg font-bold tracking-tight transition-colors shrink-0"
           style={{ color: "#4a9e5c" }}
           data-ocid="nav.link"
         >
-          Chattr
+          chattr
         </Link>
 
         {/* Nav */}
-        <nav className="flex items-center gap-6">
+        <nav className="flex items-center gap-4 sm:gap-5 overflow-hidden">
           {navLinks.map((link) => {
             const active =
               currentPath === link.to ||
@@ -57,21 +56,26 @@ function Header() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="font-mono text-xs uppercase tracking-widest transition-colors"
+                className="font-mono text-xs uppercase tracking-widest transition-colors whitespace-nowrap"
                 style={{
                   color: active ? "#4a9e5c" : "#888888",
                 }}
                 data-ocid="nav.link"
               >
-                [ {link.label} ]
+                <span className="hidden sm:inline">[ {link.label} ]</span>
+                <span className="sm:hidden">{link.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Session ID */}
-        <div className="font-mono text-xs" style={{ color: "#555" }}>
-          ID: <span style={{ color: "#888" }}>{sessionId}</span>
+        <div
+          className="font-mono text-[9px] sm:text-xs shrink-0"
+          style={{ color: "#555" }}
+        >
+          <span>ID: </span>
+          <span style={{ color: "#888" }}>{sessionId}</span>
         </div>
       </div>
     </header>
@@ -86,19 +90,37 @@ function RootLayout() {
   return (
     <div
       className={
-        isThreadPage ? "flex flex-col h-screen overflow-hidden" : "min-h-screen"
+        isThreadPage ? "flex flex-col overflow-hidden" : "min-h-screen"
       }
-      style={{ backgroundColor: "#0d0d0d", color: "#e0e0e0" }}
+      style={{
+        backgroundColor: "#0d0d0d",
+        color: "#e0e0e0",
+        ...(isThreadPage ? { height: "100dvh" } : {}),
+      }}
     >
       <Header />
-      <main className={isThreadPage ? "flex-1 overflow-hidden" : ""}>
+      <main
+        className={
+          isThreadPage ? "flex-1 overflow-hidden min-h-0 flex flex-col" : ""
+        }
+      >
         <Outlet />
       </main>
       {!isThreadPage && (
         <footer
-          className="border-t py-6 mt-12 text-center"
+          className="border-t py-6 mt-12 text-center space-y-2"
           style={{ borderColor: "#1a1a1a" }}
         >
+          <p className="font-mono text-xs" style={{ color: "#444" }}>
+            <Link
+              to="/admin"
+              className="transition-colors hover:opacity-70"
+              style={{ color: "#555" }}
+              data-ocid="footer.admin.link"
+            >
+              Admin
+            </Link>
+          </p>
           <p className="font-mono text-xs" style={{ color: "#444" }}>
             © {new Date().getFullYear()} Chattr. Built with love using{" "}
             <a
@@ -172,9 +194,9 @@ declare module "@tanstack/react-router" {
 }
 
 export default function App() {
-  // Fire-and-forget: seed backend categories on first load
+  // Fire-and-forget: sync backend categories to canonical list on first load
   useEffect(() => {
-    seedCategories();
+    syncCategoriesToCanonical();
   }, []);
 
   return <RouterProvider router={router} />;
