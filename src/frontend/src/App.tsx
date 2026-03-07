@@ -56,8 +56,15 @@ function Header({
           {/* Site name */}
           <Link
             to="/"
-            className="font-mono text-base sm:text-lg font-bold tracking-tight transition-colors shrink-0"
-            style={{ color: "#4a9e5c" }}
+            className="transition-colors shrink-0"
+            style={{
+              fontFamily: "'Jersey 10', monospace",
+              fontSize: "1.75rem",
+              fontWeight: "normal",
+              letterSpacing: 0,
+              color: "#4a9e5c",
+              lineHeight: 1,
+            }}
             data-ocid="nav.link"
           >
             chattr
@@ -80,7 +87,7 @@ function Header({
                   data-ocid="nav.link"
                 >
                   <span className="hidden sm:inline">[ {link.label} ]</span>
-                  <span className="sm:hidden">{link.label}</span>
+                  <span className="sm:hidden">[ {link.label} ]</span>
                 </Link>
               );
             })}

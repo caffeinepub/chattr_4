@@ -1499,7 +1499,7 @@ export default function CatalogPage() {
           <p className="font-mono text-xs mt-2">Be the first to start one.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
           {sortedThreads.map((thread, i) => (
             <ThreadCard
               key={String(thread.id)}

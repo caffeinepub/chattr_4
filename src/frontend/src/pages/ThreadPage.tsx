@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Copy,
   CornerUpLeft,
+  ExternalLink,
   Film,
   Flag,
   Image,
@@ -22,6 +23,7 @@ import {
   Lock,
   SendHorizontal,
   SmilePlus,
+  Trash2,
   Tv2,
   Twitter,
   Video,
@@ -940,6 +942,40 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
 }
 
 // ──────────────────────────────────────────────
+// PiP / Pop-out button for video embeds
+// ──────────────────────────────────────────────
+function PipButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Pop out video"
+      style={{
+        position: "absolute",
+        top: 6,
+        right: 6,
+        zIndex: 10,
+        background: "rgba(0,0,0,0.6)",
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 6,
+        padding: 4,
+        color: "#fff",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <ExternalLink size={12} />
+    </button>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Full media embed (shown when expanded)
 // ──────────────────────────────────────────────
 function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
@@ -958,17 +994,24 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
         </a>
       );
     return (
-      <div
-        className="relative rounded overflow-hidden"
-        style={{ paddingBottom: "56.25%", height: 0, maxWidth: 320 }}
-      >
-        <iframe
-          src={`https://www.youtube.com/embed/${videoId}`}
-          className="absolute inset-0 w-full h-full border-0 rounded"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title="YouTube video"
+      <div style={{ position: "relative", maxWidth: 320 }}>
+        <PipButton
+          onClick={() =>
+            window.open(`https://www.youtube.com/watch?v=${videoId}`, "_blank")
+          }
         />
+        <div
+          className="rounded overflow-hidden"
+          style={{ paddingBottom: "56.25%", height: 0, position: "relative" }}
+        >
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            className="absolute inset-0 w-full h-full border-0 rounded"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            title="YouTube video"
+          />
+        </div>
       </div>
     );
   }
@@ -980,16 +1023,26 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
       ? `https://player.twitch.tv/?channel=${channel}&parent=${parent}&muted=true`
       : url;
     return (
-      <div
-        className="relative rounded overflow-hidden"
-        style={{ paddingBottom: "56.25%", height: 0, maxWidth: 320 }}
-      >
-        <iframe
-          src={src}
-          className="absolute inset-0 w-full h-full border-0 rounded"
-          allowFullScreen
-          title="Twitch stream"
+      <div style={{ position: "relative", maxWidth: 320 }}>
+        <PipButton
+          onClick={() =>
+            window.open(
+              channel ? `https://www.twitch.tv/${channel}` : url,
+              "_blank",
+            )
+          }
         />
+        <div
+          className="rounded overflow-hidden"
+          style={{ paddingBottom: "56.25%", height: 0, position: "relative" }}
+        >
+          <iframe
+            src={src}
+            className="absolute inset-0 w-full h-full border-0 rounded"
+            allowFullScreen
+            title="Twitch stream"
+          />
+        </div>
       </div>
     );
   }
@@ -999,15 +1052,7 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
   }
 
   if (mediaType === "video") {
-    return (
-      // biome-ignore lint/a11y/useMediaCaption: user-provided video content
-      <video
-        src={url}
-        controls
-        className="rounded"
-        style={{ maxWidth: 280, maxHeight: 240 }}
-      />
-    );
+    return <VideoWithPip url={url} />;
   }
 
   if (mediaType === "rumble") {
@@ -1026,18 +1071,21 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
       );
     }
     return (
-      <div
-        className="relative rounded overflow-hidden"
-        style={{ paddingBottom: "56.25%", height: 0, maxWidth: 320 }}
-      >
-        <iframe
-          src={`https://rumble.com/embed/${videoId}/`}
-          className="absolute inset-0 w-full h-full border-0 rounded"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          title="Rumble video"
-          referrerPolicy="no-referrer-when-downgrade"
-        />
+      <div style={{ position: "relative", maxWidth: 320 }}>
+        <PipButton onClick={() => window.open(url, "_blank")} />
+        <div
+          className="rounded overflow-hidden"
+          style={{ paddingBottom: "56.25%", height: 0, position: "relative" }}
+        >
+          <iframe
+            src={`https://rumble.com/embed/${videoId}/`}
+            className="absolute inset-0 w-full h-full border-0 rounded"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            title="Rumble video"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        </div>
       </div>
     );
   }
@@ -1061,6 +1109,42 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
   }
 
   return null;
+}
+
+// ──────────────────────────────────────────────
+// Native video with PiP support
+// ──────────────────────────────────────────────
+function VideoWithPip({ url }: { url: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  async function handlePip() {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        await video.requestPictureInPicture();
+      }
+    } catch {
+      // PiP not supported or blocked — open in new tab
+      window.open(url, "_blank");
+    }
+  }
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <PipButton onClick={handlePip} />
+      {/* biome-ignore lint/a11y/useMediaCaption: user-provided video content */}
+      <video
+        ref={videoRef}
+        src={url}
+        controls
+        className="rounded"
+        style={{ maxWidth: 280, maxHeight: 240 }}
+      />
+    </div>
+  );
 }
 
 // ──────────────────────────────────────────────
@@ -1131,9 +1215,6 @@ interface ReactionRowProps {
   /** Force re-render from parent */
   reactionVersion: number;
   onReactionChange: () => void;
-  /** External picker state control — trigger button lives outside the bubble */
-  showPicker: boolean;
-  setShowPicker: (v: boolean) => void;
 }
 
 function ReactionRow({
@@ -1144,13 +1225,10 @@ function ReactionRow({
   counts,
   myReactions,
   onReactionChange,
-  showPicker,
-  setShowPicker,
 }: ReactionRowProps) {
   const activeEmojis = REACTION_EMOJIS.filter((e) => (counts[e] ?? 0) > 0);
 
   async function toggleReaction(emoji: string) {
-    setShowPicker(false);
     const existingPostId = myReactions.get(emoji);
     if (existingPostId) {
       // Remove: delete the reaction post
@@ -1178,7 +1256,7 @@ function ReactionRow({
     onReactionChange();
   }
 
-  if (activeEmojis.length === 0 && !showPicker) return null;
+  if (activeEmojis.length === 0) return null;
 
   return (
     <div
@@ -1209,40 +1287,6 @@ function ReactionRow({
           </button>
         );
       })}
-
-      {/* Emoji picker dropdown — opened from the external trigger button */}
-      {showPicker && (
-        <div className="relative">
-          <div
-            className="absolute z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl shadow-lg"
-            style={{
-              backgroundColor: "#1e1e1e",
-              border: "1px solid #2a2a2a",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-              bottom: "calc(100% + 6px)",
-              ...(isOwn ? { right: 0 } : { left: 0 }),
-              whiteSpace: "nowrap",
-            }}
-          >
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                type="button"
-                key={emoji}
-                onClick={() => toggleReaction(emoji)}
-                className="text-base leading-none p-1 rounded-lg transition-all hover:bg-white/10"
-                style={{
-                  filter: myReactions.has(emoji)
-                    ? "drop-shadow(0 0 4px #4a9e5c)"
-                    : "none",
-                }}
-                title={emoji}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1390,19 +1434,24 @@ interface ContextMenuState {
 interface MessageContextMenuProps {
   state: ContextMenuState;
   threadId: string;
+  sessionId: string;
   onClose: () => void;
   onReply: (post: Post) => void;
   onReport: () => void;
+  onDelete: () => void;
 }
 
 function MessageContextMenu({
   state,
   threadId,
+  sessionId,
   onClose,
   onReply,
   onReport,
+  onDelete,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Adjust position so menu doesn't overflow viewport
   const [pos, setPos] = useState({ x: state.x, y: state.y });
@@ -1447,21 +1496,37 @@ function MessageContextMenu({
     onClose();
   }
 
+  async function handleConfirmDelete() {
+    try {
+      await backendApi.deletePost(BigInt(state.post.id));
+      toast.success("Message deleted");
+      onDelete();
+      onClose();
+    } catch {
+      toast.error("Failed to delete message");
+    }
+  }
+
+  const isOwnPost = state.post.authorSessionId === sessionId;
+
   const menuItems = [
     {
       icon: <CornerUpLeft size={13} />,
       label: "Reply",
       onClick: handleReply,
+      danger: false,
     },
     {
       icon: <Copy size={13} />,
       label: "Copy Text",
       onClick: handleCopyText,
+      danger: false,
     },
     {
       icon: <Link2 size={13} />,
       label: "Share",
       onClick: handleShare,
+      danger: false,
     },
     {
       icon: <Flag size={13} />,
@@ -1469,6 +1534,16 @@ function MessageContextMenu({
       onClick: handleReport,
       danger: true,
     },
+    ...(isOwnPost
+      ? [
+          {
+            icon: <Trash2 size={13} />,
+            label: "Delete",
+            onClick: () => setConfirmDelete(true),
+            danger: true,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1494,24 +1569,60 @@ function MessageContextMenu({
         }}
         data-ocid="thread.context_menu"
       >
-        {menuItems.map((item, i) => (
-          <button
-            type="button"
-            key={item.label}
-            onClick={item.onClick}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 font-mono text-xs text-left transition-colors hover:bg-white/5"
-            style={{
-              color: item.danger ? "#e05555" : "#ccc",
-              borderBottom:
-                i < menuItems.length - 1 ? "1px solid #2a2a2a" : "none",
-            }}
-          >
-            <span style={{ color: item.danger ? "#e05555" : "#666" }}>
-              {item.icon}
-            </span>
-            {item.label}
-          </button>
-        ))}
+        {confirmDelete ? (
+          /* Delete confirmation state */
+          <div className="px-3.5 py-3 flex flex-col gap-2.5">
+            <p className="font-mono text-xs" style={{ color: "#ccc" }}>
+              Delete this message?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 px-2.5 py-1.5 rounded-lg font-mono text-xs transition-colors hover:bg-white/5"
+                style={{
+                  color: "#888",
+                  border: "1px solid #2a2a2a",
+                }}
+                data-ocid="thread.delete_cancel_button"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 px-2.5 py-1.5 rounded-lg font-mono text-xs transition-colors"
+                style={{
+                  backgroundColor: "#e05555",
+                  color: "#fff",
+                  border: "none",
+                }}
+                data-ocid="thread.delete_confirm_button"
+              >
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        ) : (
+          menuItems.map((item, i) => (
+            <button
+              type="button"
+              key={item.label}
+              onClick={item.onClick}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 font-mono text-xs text-left transition-colors hover:bg-white/5"
+              style={{
+                color: item.danger ? "#e05555" : "#ccc",
+                borderBottom:
+                  i < menuItems.length - 1 ? "1px solid #2a2a2a" : "none",
+              }}
+            >
+              <span style={{ color: item.danger ? "#e05555" : "#666" }}>
+                {item.icon}
+              </span>
+              {item.label}
+            </button>
+          ))
+        )}
       </div>
     </>
   );
@@ -1643,6 +1754,38 @@ function ChatBubble({
 
   // Hook must be called unconditionally before any early returns
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
+  const reactionBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropdownOpenUpward, setDropdownOpenUpward] = useState(true);
+
+  // Close reaction picker on outside click
+  useEffect(() => {
+    if (!showReactionPicker) return;
+    function handleOutside(e: MouseEvent) {
+      if (
+        reactionPickerRef.current &&
+        !reactionPickerRef.current.contains(e.target as Node)
+      ) {
+        setShowReactionPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [showReactionPicker]);
+
+  // Detect direction when picker opens
+  function handleReactionBtnClick() {
+    if (!showReactionPicker && reactionBtnRef.current) {
+      const rect = reactionBtnRef.current.getBoundingClientRect();
+      const dropdownHeight = 252; // approx max height of 6 items
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setDropdownOpenUpward(
+        spaceAbove >= dropdownHeight || spaceAbove > spaceBelow,
+      );
+    }
+    setShowReactionPicker((v) => !v);
+  }
 
   if (post.isDeleted) {
     return (
@@ -1685,11 +1828,21 @@ function ChatBubble({
     />
   );
 
+  const REACTION_LABELS: Record<string, string> = {
+    "👍": "Like",
+    "❤️": "Love",
+    "😂": "Haha",
+    "😮": "Wow",
+    "😢": "Sad",
+    "👎": "Dislike",
+  };
+
   const reactionTrigger = (
-    <div className="relative self-start mt-1">
+    <div ref={reactionPickerRef} className="relative self-start mt-1">
       <button
+        ref={reactionBtnRef}
         type="button"
-        onClick={() => setShowReactionPicker((v) => !v)}
+        onClick={handleReactionBtnClick}
         className="inline-flex items-center justify-center w-7 h-7 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{
           backgroundColor: showReactionPicker
@@ -1708,62 +1861,73 @@ function ChatBubble({
 
       {showReactionPicker && (
         <div
-          className="absolute z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl shadow-lg"
+          className="absolute z-30 flex flex-col py-1 rounded-xl shadow-lg overflow-y-auto"
           style={{
             backgroundColor: "#1e1e1e",
             border: "1px solid #2a2a2a",
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-            bottom: "calc(100% + 6px)",
+            ...(dropdownOpenUpward
+              ? { bottom: "calc(100% + 6px)" }
+              : { top: "calc(100% + 6px)" }),
+            maxHeight: 240,
+            minWidth: 110,
             ...(isOwn ? { right: 0 } : { left: 0 }),
-            whiteSpace: "nowrap",
           }}
         >
-          {REACTION_EMOJIS.map((emoji) => (
-            <button
-              type="button"
-              key={emoji}
-              onClick={async () => {
-                setShowReactionPicker(false);
-                const myReactions = myReactionIndex.get(postIdStr) ?? new Map();
-                const existingPostId = myReactions.get(emoji);
-                if (existingPostId) {
-                  try {
-                    await backendApi.deletePost(BigInt(existingPostId));
-                  } catch {
-                    // ignore
+          {REACTION_EMOJIS.map((emoji) => {
+            const isActive = (myReactionIndex.get(postIdStr) ?? new Map()).has(
+              emoji,
+            );
+            return (
+              <button
+                type="button"
+                key={emoji}
+                onClick={async () => {
+                  setShowReactionPicker(false);
+                  const myReactions =
+                    myReactionIndex.get(postIdStr) ?? new Map();
+                  const existingPostId = myReactions.get(emoji);
+                  if (existingPostId) {
+                    try {
+                      await backendApi.deletePost(BigInt(existingPostId));
+                    } catch {
+                      // ignore
+                    }
+                  } else {
+                    try {
+                      const content = encodeReactionContent(
+                        sessionId,
+                        emoji,
+                        postIdStr,
+                      );
+                      await backendApi.createPost(
+                        BigInt(threadId),
+                        sessionId,
+                        content,
+                        null,
+                        "reaction",
+                        null,
+                      );
+                    } catch {
+                      // ignore
+                    }
                   }
-                } else {
-                  try {
-                    const content = encodeReactionContent(
-                      sessionId,
-                      emoji,
-                      postIdStr,
-                    );
-                    await backendApi.createPost(
-                      BigInt(threadId),
-                      sessionId,
-                      content,
-                      null,
-                      "reaction",
-                      null,
-                    );
-                  } catch {
-                    // ignore
-                  }
-                }
-                onReactionChange();
-              }}
-              className="text-base leading-none p-1 rounded-lg transition-all hover:bg-white/10"
-              style={{
-                filter: (myReactionIndex.get(postIdStr) ?? new Map()).has(emoji)
-                  ? "drop-shadow(0 0 4px #4a9e5c)"
-                  : "none",
-              }}
-              title={emoji}
-            >
-              {emoji}
-            </button>
-          ))}
+                  onReactionChange();
+                }}
+                className="flex items-center gap-2 px-3 py-2 transition-all hover:bg-white/10 font-mono text-xs"
+                style={{
+                  color: isActive ? "#6abd7c" : "#ccc",
+                  backgroundColor: isActive ? "#4a9e5c10" : "transparent",
+                }}
+                title={REACTION_LABELS[emoji] ?? emoji}
+              >
+                <span style={{ fontSize: 16, lineHeight: 1 }}>{emoji}</span>
+                <span style={{ color: isActive ? "#6abd7c" : "#888" }}>
+                  {REACTION_LABELS[emoji] ?? emoji}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1799,12 +1963,14 @@ function ChatBubble({
             isOwn
               ? {
                   backgroundColor: "#1a4d26",
-                  borderBottomRightRadius: 4,
+                  borderTopRightRadius: 4,
+                  borderBottomRightRadius: 16,
                   border: "1px solid #2d6b3a",
                 }
               : {
                   backgroundColor: "#1e1e1e",
-                  borderBottomLeftRadius: 4,
+                  borderTopLeftRadius: 4,
+                  borderBottomLeftRadius: 16,
                   border: "1px solid #2a2a2a",
                 }
           }
@@ -1919,8 +2085,6 @@ function ChatBubble({
           myReactions={myReactionIndex.get(postIdStr) ?? new Map()}
           reactionVersion={reactionVersion}
           onReactionChange={onReactionChange}
-          showPicker={showReactionPicker}
-          setShowPicker={setShowReactionPicker}
         />
       </div>
 
@@ -2295,6 +2459,9 @@ export default function ThreadPage() {
 
   const [thread, setThread] = useState<Thread | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [titleCollapsed, setTitleCollapsed] = useState(false);
+  const [titleIsMultiLine, setTitleIsMultiLine] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   // Visible posts (reaction posts filtered out)
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -2365,6 +2532,8 @@ export default function ThreadPage() {
   // Use refs so scroll/poll callbacks always read current values without stale closures
   const isAtBottomRef = useRef(true);
   const myUsernameRef = useRef<string | undefined>(undefined);
+  const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRestoredRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2449,15 +2618,33 @@ export default function ThreadPage() {
     recordThreadVisit(threadIdStr);
   }, [threadIdStr]);
 
-  // Auto-scroll when new posts arrive (only if user is at the bottom)
+  // Detect whether the title wraps to more than one line
+  // biome-ignore lint/correctness/useExhaustiveDependencies: titleCollapsed changes layout so we re-measure; intentional
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const check = () => {
+      const lineHeight =
+        Number.parseFloat(getComputedStyle(el).lineHeight) || 20;
+      setTitleIsMultiLine(el.scrollHeight > lineHeight * 1.5);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [thread?.title, titleCollapsed]);
+
+  // Auto-scroll only when the current user sends a message
   useEffect(() => {
     if (posts.length > prevPostCountRef.current) {
-      if (isAtBottomRef.current) {
+      const newestPost = posts[posts.length - 1];
+      const isOwnMessage = newestPost?.authorSessionId === sessionId;
+      if (isOwnMessage) {
         scrollToBottom();
       }
     }
     prevPostCountRef.current = posts.length;
-  }, [posts.length, scrollToBottom]);
+  }, [posts, scrollToBottom, sessionId]);
 
   useEffect(() => {
     loadData();
@@ -2473,14 +2660,35 @@ export default function ThreadPage() {
       leaveThread(threadIdNum, sessionId);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       if (pollRef.current) clearInterval(pollRef.current);
+      // Save scroll position on unmount
+      if (scrollContainerRef.current) {
+        sessionStorage.setItem(
+          `chattr_scroll_${threadIdStr}`,
+          String(scrollContainerRef.current.scrollTop),
+        );
+      }
     };
-  }, [threadIdNum, sessionId, loadData]);
+  }, [threadIdNum, sessionId, loadData, threadIdStr]);
 
-  // Scroll on mount
+  // Restore scroll position on first thread load (or scroll to bottom on first visit)
   useEffect(() => {
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
-  }, [scrollToBottom]);
+    if (!thread || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = sessionStorage.getItem(`chattr_scroll_${threadIdStr}`);
+    if (saved && scrollContainerRef.current) {
+      const pos = Number(saved);
+      if (pos > 0) {
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = pos;
+          }
+        });
+        return;
+      }
+    }
+    // No saved position — scroll to bottom on first visit
+    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+  }, [thread, threadIdStr]);
 
   // Track scroll position for floating indicators
   useEffect(() => {
@@ -2501,6 +2709,15 @@ export default function ThreadPage() {
         setUnreadCount(0);
       }
 
+      // Debounced scroll position save
+      if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = setTimeout(() => {
+        sessionStorage.setItem(
+          `chattr_scroll_${threadIdStr}`,
+          String(container.scrollTop),
+        );
+      }, 300);
+
       // Check if mention post is now visible
       if (pendingMentionPostId) {
         const el = document.getElementById(`post-${pendingMentionPostId}`);
@@ -2519,7 +2736,7 @@ export default function ThreadPage() {
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [pendingMentionPostId]);
+  }, [pendingMentionPostId, threadIdStr]);
 
   // Close context menu on scroll
   useEffect(() => {
@@ -2887,74 +3104,99 @@ export default function ThreadPage() {
           </button>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* ── Row 1: category tag (left) + live indicator (right) ── */}
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span
+                  className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                  style={{
+                    backgroundColor: `${catColor}22`,
+                    color: catColor,
+                    border: `1px solid ${catColor}44`,
+                  }}
+                >
+                  {category?.name ?? "Unknown"}
+                </span>
+                {thread.isClosed && (
+                  <span
+                    className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                    style={{
+                      backgroundColor: "#c0392b22",
+                      color: "#c0392b",
+                      border: "1px solid #c0392b44",
+                    }}
+                  >
+                    CLOSED
+                  </span>
+                )}
+                {thread.isArchived && (
+                  <span
+                    className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                    style={{
+                      backgroundColor: "#77777722",
+                      color: "#777",
+                      border: "1px solid #77777744",
+                    }}
+                  >
+                    ARCHIVED
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span
+                  className={live ? "animate-pulse" : ""}
+                  style={{
+                    display: "inline-block",
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    backgroundColor: live ? "#4a9e5c" : "#444",
+                    boxShadow: live ? "0 0 5px #4a9e5c" : "none",
+                  }}
+                />
+                <span
+                  className="font-mono text-[10px] uppercase tracking-wider"
+                  style={{ color: live ? "#4a9e5c" : "#444" }}
+                >
+                  {live ? "LIVE" : "OFFLINE"}
+                </span>
+                <span
+                  className="font-mono text-[10px] ml-0.5"
+                  style={{ color: "#555" }}
+                >
+                  {Number(thread.postCount)}
+                </span>
+              </div>
+            </div>
+
+            {/* ── Row 2: title + chevron (only when multi-line or collapsed) ── */}
+            <div className="flex items-start gap-1">
               <h1
-                className="font-semibold text-sm leading-snug truncate"
+                ref={titleRef}
+                className={`font-semibold text-sm leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
                 style={{ color: "#e0e0e0" }}
               >
                 {thread.title}
               </h1>
-              <span
-                className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                style={{
-                  backgroundColor: `${catColor}22`,
-                  color: catColor,
-                  border: `1px solid ${catColor}44`,
-                }}
-              >
-                {category?.name ?? "Unknown"}
-              </span>
-              {thread.isClosed && (
-                <span
-                  className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                  style={{
-                    backgroundColor: "#c0392b22",
-                    color: "#c0392b",
-                    border: "1px solid #c0392b44",
-                  }}
+              {(titleIsMultiLine || titleCollapsed) && (
+                <button
+                  type="button"
+                  onClick={() => setTitleCollapsed((v) => !v)}
+                  className="shrink-0 p-0.5 rounded transition-colors hover:bg-white/5 mt-0.5"
+                  style={{ color: "#555" }}
+                  aria-label={
+                    titleCollapsed ? "Show full title" : "Collapse title"
+                  }
+                  data-ocid="thread.title_toggle"
                 >
-                  CLOSED
-                </span>
-              )}
-              {thread.isArchived && (
-                <span
-                  className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                  style={{
-                    backgroundColor: "#77777722",
-                    color: "#777",
-                    border: "1px solid #77777744",
-                  }}
-                >
-                  ARCHIVED
-                </span>
+                  {titleCollapsed ? (
+                    <ChevronDown size={13} />
+                  ) : (
+                    <ChevronUp size={13} />
+                  )}
+                </button>
               )}
             </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              className={live ? "animate-pulse" : ""}
-              style={{
-                display: "inline-block",
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                backgroundColor: live ? "#4a9e5c" : "#444",
-                boxShadow: live ? "0 0 5px #4a9e5c" : "none",
-              }}
-            />
-            <span
-              className="font-mono text-[10px] uppercase tracking-wider"
-              style={{ color: live ? "#4a9e5c" : "#444" }}
-            >
-              {live ? "LIVE" : "OFFLINE"}
-            </span>
-            <span
-              className="font-mono text-[10px] ml-1"
-              style={{ color: "#555" }}
-            >
-              {Number(thread.postCount)}
-            </span>
           </div>
         </div>
       </div>
@@ -3379,6 +3621,7 @@ export default function ThreadPage() {
         <MessageContextMenu
           state={contextMenu}
           threadId={threadIdStr}
+          sessionId={sessionId}
           onClose={() => setContextMenu(null)}
           onReply={(post) => {
             setReplyToPost(post);
@@ -3387,6 +3630,7 @@ export default function ThreadPage() {
           onReport={() => {
             setReportModalOpen(true);
           }}
+          onDelete={() => loadData()}
         />
       )}
 
