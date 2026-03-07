@@ -71,7 +71,7 @@ function Header() {
 
         {/* Session ID */}
         <div
-          className="font-mono text-[9px] sm:text-xs shrink-0"
+          className="font-mono text-xs sm:text-xs shrink-0"
           style={{ color: "#555" }}
         >
           <span>ID: </span>

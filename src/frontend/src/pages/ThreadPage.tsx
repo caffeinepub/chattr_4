@@ -64,11 +64,18 @@ function timeAgo(tsMs: number): string {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
+  General: "#5d7fa3",
   Politics: "#c0392b",
-  Art: "#8e44ad",
-  Entertainment: "#2980b9",
+  Science: "#16a085",
   Technology: "#27ae60",
+  Entertainment: "#2980b9",
   Sports: "#e67e22",
+  Gaming: "#9b59b6",
+  Music: "#e91e8c",
+  Art: "#8e44ad",
+  Finance: "#f39c12",
+  Education: "#1abc9c",
+  Religion: "#795548",
   Random: "#7f8c8d",
 };
 
