@@ -7,10 +7,18 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export interface Ban {
-    timestamp: bigint;
-    sessionId: string;
-    reason: string;
+export interface http_header {
+    value: string;
+    name: string;
+}
+export interface Category {
+    id: bigint;
+    name: string;
+}
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
 }
 export interface Thread {
     id: bigint;
@@ -25,6 +33,16 @@ export interface Thread {
     isArchived: boolean;
     thumbnailType: string;
 }
+export interface OgMetadata {
+    title?: string;
+    description?: string;
+    siteName?: string;
+    imageUrl?: string;
+}
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
+}
 export interface Post {
     id: bigint;
     isDeleted: boolean;
@@ -34,23 +52,42 @@ export interface Post {
     authorSessionId: string;
     mediaType: string;
     threadId: bigint;
+    linkPreview?: OgMetadata;
+}
+export interface Ban {
+    timestamp: bigint;
+    sessionId: string;
+    reason: string;
 }
 export interface UserProfile {
     username: string;
     avatarUrl?: string;
     sessionId: string;
 }
-export interface Category {
-    id: bigint;
-    name: string;
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
 }
 export interface backendInterface {
     addCategory(name: string): Promise<Category>;
     banUser(sessionId: string, reason: string): Promise<Ban>;
-    createPost(threadId: bigint, authorSessionId: string, content: string, mediaUrl: string | null, mediaType: string): Promise<Post>;
+    createPost(threadId: bigint, authorSessionId: string, content: string, mediaUrl: string | null, mediaType: string, linkPreview: OgMetadata | null): Promise<Post>;
     createThread(title: string, categoryId: bigint, creatorSessionId: string, thumbnailUrl: string | null, thumbnailType: string): Promise<Thread>;
     deleteCategory(id: bigint): Promise<boolean>;
     deletePost(id: bigint): Promise<Post>;
+    /**
+     * / * Fetches Open Graph metadata (title, description, image) from any URL.
+     * /    * Returns null fields if not found.
+     */
+    fetchOgMetadata(url: string): Promise<OgMetadata>;
+    fetchRedditPostTitle(url: string): Promise<string | null>;
+    fetchRumbleThumbnail(url: string): Promise<string | null>;
+    /**
+     * / * Fetches only the og:image Open Graph tag from a Twitch channel/stream.
+     * /    * Returns ?Text (null if not found).
+     */
+    fetchTwitchThumbnail(url: string): Promise<string | null>;
     getAllPosts(): Promise<Array<Post>>;
     getAllProfiles(): Promise<Array<UserProfile>>;
     getAllThreads(): Promise<Array<Thread>>;
@@ -80,6 +117,7 @@ export interface backendInterface {
         err: string;
     }>;
     start(): Promise<void>;
+    transform(input: TransformationInput): Promise<TransformationOutput>;
     unbanUser(sessionId: string): Promise<boolean>;
     updateThread(id: bigint, isClosed: boolean, isArchived: boolean): Promise<boolean>;
     updateUsername(sessionId: string, newUsername: string): Promise<{

@@ -16,6 +16,12 @@ export interface Ban {
   'reason' : string,
 }
 export interface Category { 'id' : bigint, 'name' : string }
+export interface OgMetadata {
+  'title' : [] | [string],
+  'description' : [] | [string],
+  'siteName' : [] | [string],
+  'imageUrl' : [] | [string],
+}
 export interface Post {
   'id' : bigint,
   'isDeleted' : boolean,
@@ -25,6 +31,7 @@ export interface Post {
   'authorSessionId' : string,
   'mediaType' : string,
   'threadId' : bigint,
+  'linkPreview' : [] | [OgMetadata],
 }
 export interface Thread {
   'id' : bigint,
@@ -38,6 +45,15 @@ export interface Thread {
   'isClosed' : boolean,
   'isArchived' : boolean,
   'thumbnailType' : string,
+}
+export interface TransformationInput {
+  'context' : Uint8Array,
+  'response' : http_request_result,
+}
+export interface TransformationOutput {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
 }
 export interface UserProfile {
   'username' : string,
@@ -54,6 +70,12 @@ export interface _CaffeineStorageRefillInformation {
 export interface _CaffeineStorageRefillResult {
   'success' : [] | [boolean],
   'topped_up_amount' : [] | [bigint],
+}
+export interface http_header { 'value' : string, 'name' : string }
+export interface http_request_result {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
 }
 export interface _SERVICE {
   '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
@@ -74,7 +96,7 @@ export interface _SERVICE {
   'addCategory' : ActorMethod<[string], Category>,
   'banUser' : ActorMethod<[string, string], Ban>,
   'createPost' : ActorMethod<
-    [bigint, string, string, [] | [string], string],
+    [bigint, string, string, [] | [string], string, [] | [OgMetadata]],
     Post
   >,
   'createThread' : ActorMethod<
@@ -83,6 +105,18 @@ export interface _SERVICE {
   >,
   'deleteCategory' : ActorMethod<[bigint], boolean>,
   'deletePost' : ActorMethod<[bigint], Post>,
+  /**
+   * / * Fetches Open Graph metadata (title, description, image) from any URL.
+   * /    * Returns null fields if not found.
+   */
+  'fetchOgMetadata' : ActorMethod<[string], OgMetadata>,
+  'fetchRedditPostTitle' : ActorMethod<[string], [] | [string]>,
+  'fetchRumbleThumbnail' : ActorMethod<[string], [] | [string]>,
+  /**
+   * / * Fetches only the og:image Open Graph tag from a Twitch channel/stream.
+   * /    * Returns ?Text (null if not found).
+   */
+  'fetchTwitchThumbnail' : ActorMethod<[string], [] | [string]>,
   'getAllPosts' : ActorMethod<[], Array<Post>>,
   'getAllProfiles' : ActorMethod<[], Array<UserProfile>>,
   'getAllThreads' : ActorMethod<[], Array<Thread>>,
@@ -108,6 +142,7 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'start' : ActorMethod<[], undefined>,
+  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
   'unbanUser' : ActorMethod<[string], boolean>,
   'updateThread' : ActorMethod<[bigint, boolean, boolean], boolean>,
   'updateUsername' : ActorMethod<

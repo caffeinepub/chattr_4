@@ -1,12 +1,21 @@
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Copy,
   CornerUpLeft,
   Film,
+  Flag,
   Image,
   ImagePlus,
   Link2,
@@ -21,6 +30,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { Category, Post, Thread, UserProfile } from "../backendApi";
+import GifPicker from "../components/GifPicker";
 import {
   type MediaType,
   detectMediaType,
@@ -53,9 +63,22 @@ declare global {
 }
 
 // ──────────────────────────────────────────────
+// OG Metadata cache (module-level, avoids re-fetching)
+// ──────────────────────────────────────────────
+const ogMetadataCache = new Map<string, backendApi.OgMetadata>();
+
+// ──────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "👎"] as const;
+
+const REPORT_REASONS = [
+  "Spam",
+  "Harassment",
+  "Misinformation",
+  "Inappropriate Content",
+  "Other",
+] as const;
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -112,6 +135,27 @@ function extractTwitchChannel(url: string): string | null {
   return match ? match[1] : null;
 }
 
+function extractRumbleVideoId(url: string): string | null {
+  // 1. Already an embed URL: rumble.com/embed/{id}/
+  const embedMatch = url.match(/rumble\.com\/embed\/([a-zA-Z0-9_-]+)/);
+  if (embedMatch) return embedMatch[1];
+
+  // 2. Video page: rumble.com/v{id}-{title}.html → use "v{id}" as slug
+  const videoPageMatch = url.match(/rumble\.com\/(v[a-zA-Z0-9]+-[^/?]+)/);
+  if (videoPageMatch) {
+    // Extract just the v{id} portion before the first dash after "v"
+    const slug = videoPageMatch[1];
+    const vIdMatch = slug.match(/^(v[a-zA-Z0-9]+)/);
+    return vIdMatch ? vIdMatch[1] : slug;
+  }
+
+  // 3. Short video URL: rumble.com/v{id}
+  const shortMatch = url.match(/rumble\.com\/(v[a-zA-Z0-9]+)/);
+  if (shortMatch) return shortMatch[1];
+
+  return null;
+}
+
 function truncateUrl(url: string, max = 48): string {
   if (url.length <= max) return url;
   return `${url.slice(0, max)}…`;
@@ -126,6 +170,35 @@ function scrollToPost(postId: string): void {
   document
     .getElementById(`post-${postId}`)
     ?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// Returns true if a URL should be rendered as an embed (not a link preview)
+function isEmbedUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    const host = hostname.replace(/^www\./, "");
+    return (
+      host === "youtube.com" ||
+      host === "youtu.be" ||
+      host === "twitch.tv" ||
+      host === "twitter.com" ||
+      host === "x.com" ||
+      host === "rumble.com" ||
+      host === "reddit.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Extract the first URL from text that is a link-preview candidate (not an embed)
+function extractFirstLinkPreviewUrl(text: string): string | null {
+  const match = text.match(/(https?:\/\/[^\s]+)/gi);
+  if (!match) return null;
+  for (const url of match) {
+    if (!isEmbedUrl(url)) return url;
+  }
+  return null;
 }
 
 // Parse @mentions in content and render highlighted spans
@@ -368,11 +441,401 @@ function TwitterEmbed({ url }: { url: string }) {
 }
 
 // ──────────────────────────────────────────────
+// Reddit URL title extractor (frontend-only fallback)
+// ──────────────────────────────────────────────
+function extractRedditTitleFromUrl(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname;
+    // /r/{sub}/comments/{id}/{title_slug}/
+    const match = pathname.match(/\/r\/([^/]+)\/comments\/[^/]+\/([^/]+)/);
+    if (match) {
+      const subreddit = match[1];
+      const titleSlug = match[2];
+      const humanTitle = decodeURIComponent(titleSlug)
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return humanTitle ? `${humanTitle} (r/${subreddit})` : `r/${subreddit}`;
+    }
+    const subMatch = pathname.match(/\/r\/([^/]+)/);
+    if (subMatch) return `r/${subMatch[1]}`;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+// ──────────────────────────────────────────────
+// Reddit Embed
+// ──────────────────────────────────────────────
+interface RedditPostData {
+  title: string;
+  subreddit: string;
+  thumbnail: string | null;
+  body: string | null;
+}
+
+function RedditEmbed({ url }: { url: string }) {
+  const [postData, setPostData] = useState<RedditPostData | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    setPostData(null);
+
+    backendApi
+      .fetchOgMetadata(url)
+      .then((meta) => {
+        if (!cancelled) {
+          const fallbackTitle =
+            extractRedditTitleFromUrl(url) ??
+            (() => {
+              try {
+                return new URL(url).hostname.replace(/^www\./, "");
+              } catch {
+                return "Reddit";
+              }
+            })();
+          setPostData({
+            title: meta.title ?? fallbackTitle,
+            subreddit: "",
+            thumbnail: meta.imageUrl ?? null,
+            body: meta.description ?? null,
+          });
+          setStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const fallbackTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+          setPostData({
+            title: fallbackTitle,
+            subreddit: "",
+            thumbnail: null,
+            body: null,
+          });
+          setStatus("ready");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (status === "error") {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-xs break-all underline"
+        style={{ color: "#4a9e5c" }}
+      >
+        {url}
+      </a>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        maxWidth: 320,
+        borderRadius: 10,
+        backgroundColor: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        overflow: "hidden",
+      }}
+    >
+      {status === "loading" ? (
+        <div style={{ padding: "10px 12px" }}>
+          <span className="font-mono text-[11px]" style={{ color: "#555" }}>
+            Loading Reddit post…
+          </span>
+        </div>
+      ) : postData ? (
+        <>
+          {postData.thumbnail && (
+            <img
+              src={postData.thumbnail}
+              alt="Post thumbnail"
+              style={{
+                width: "100%",
+                height: 120,
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          )}
+          <div style={{ padding: "10px 12px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 6,
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 20 20"
+                fill="#ff4500"
+                aria-hidden="true"
+                style={{ flexShrink: 0 }}
+              >
+                <circle cx="10" cy="10" r="10" fill="#ff4500" />
+                <path
+                  d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+                  fill="white"
+                />
+              </svg>
+              {postData.subreddit && (
+                <span
+                  className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                  style={{
+                    backgroundColor: "#ff450022",
+                    color: "#ff6633",
+                    border: "1px solid #ff450033",
+                  }}
+                >
+                  {postData.subreddit}
+                </span>
+              )}
+            </div>
+            <p
+              className="font-mono text-xs leading-snug mb-2"
+              style={{ color: "#e0e0e0", fontWeight: 600 }}
+            >
+              {postData.title}
+            </p>
+            {postData.body && (
+              <p
+                className="font-mono text-[11px] leading-relaxed mb-3"
+                style={{ color: "#888" }}
+              >
+                {postData.body}
+                {postData.body.length >= 200 ? "…" : ""}
+              </p>
+            )}
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[10px] underline"
+              style={{ color: "#ff4500" }}
+            >
+              View on Reddit →
+            </a>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Link Preview Card (iMessage-style)
+// ──────────────────────────────────────────────
+function LinkPreviewCard({
+  url,
+  preloadedMeta,
+}: {
+  url: string;
+  preloadedMeta?: backendApi.OgMetadata;
+}) {
+  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(
+    preloadedMeta ?? null,
+  );
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    preloadedMeta ? "ready" : "loading",
+  );
+
+  useEffect(() => {
+    // If preloaded data was provided, use it immediately — no fetch needed
+    if (preloadedMeta) {
+      setMeta(preloadedMeta);
+      setStatus("ready");
+      return;
+    }
+
+    let cancelled = false;
+    setStatus("loading");
+
+    // Check cache first
+    if (ogMetadataCache.has(url)) {
+      const cached = ogMetadataCache.get(url)!;
+      setMeta(cached);
+      setStatus("ready");
+      return;
+    }
+
+    backendApi
+      .fetchOgMetadata(url)
+      .then((data) => {
+        if (cancelled) return;
+        ogMetadataCache.set(url, data);
+        setMeta(data);
+        setStatus(
+          data.title || data.description || data.imageUrl ? "ready" : "error",
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url, preloadedMeta]);
+
+  const hostname = (() => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  })();
+
+  // Prefer siteName from metadata, fall back to hostname
+  const siteLabel = meta?.siteName ?? hostname;
+
+  // Fallback: just show the URL as a link
+  if (status === "error") {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block mt-2 font-mono text-xs break-all underline"
+        style={{ color: "#4a9e5c" }}
+      >
+        {url}
+      </a>
+    );
+  }
+
+  if (status === "loading") {
+    return (
+      <div
+        className="flex items-center gap-2 mt-2 rounded-xl px-3 py-2"
+        style={{
+          backgroundColor: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          maxWidth: 320,
+        }}
+      >
+        <div
+          style={{
+            width: 60,
+            height: 60,
+            borderRadius: 8,
+            backgroundColor: "#2a2a2a",
+            flexShrink: 0,
+          }}
+        />
+        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+          <div
+            style={{
+              height: 10,
+              borderRadius: 4,
+              backgroundColor: "#2a2a2a",
+              width: "70%",
+            }}
+          />
+          <div
+            style={{
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#222",
+              width: "90%",
+            }}
+          />
+          <div
+            style={{
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#1e1e1e",
+              width: "50%",
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 mt-2 rounded-xl overflow-hidden transition-opacity hover:opacity-80"
+      style={{
+        backgroundColor: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        maxWidth: 320,
+        textDecoration: "none",
+      }}
+    >
+      {meta?.imageUrl && (
+        <img
+          src={meta.imageUrl}
+          alt={meta.title ?? hostname}
+          style={{
+            width: 60,
+            height: 60,
+            objectFit: "cover",
+            flexShrink: 0,
+            display: "block",
+          }}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      )}
+      <div
+        className="flex flex-col justify-center py-2 px-1 min-w-0 flex-1"
+        style={{ paddingLeft: meta?.imageUrl ? 0 : 12 }}
+      >
+        {meta?.title && (
+          <p
+            className="font-mono text-[12px] font-bold leading-snug mb-0.5 truncate"
+            style={{ color: "#e0e0e0" }}
+          >
+            {meta.title}
+          </p>
+        )}
+        {meta?.description && (
+          <p
+            className="font-mono text-[11px] leading-snug mb-0.5"
+            style={{
+              color: "#888",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {meta.description}
+          </p>
+        )}
+        <p className="font-mono text-[10px]" style={{ color: "#555" }}>
+          {siteLabel}
+        </p>
+      </div>
+    </a>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Media type icon + label
 // ──────────────────────────────────────────────
 function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
   const configs: Record<
-    Exclude<MediaType, "text" | "uploaded_image">,
+    Exclude<MediaType, "text" | "uploaded_image" | "gif">,
     { icon: React.ReactNode; label: string; color: string }
   > = {
     youtube: {
@@ -389,6 +852,40 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
       icon: <Twitter size={11} />,
       label: "X / Twitter",
       color: "#1da1f2",
+    },
+    rumble: {
+      icon: (
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h4c2.21 0 4 1.79 4 4 0 1.1-.45 2.1-1.17 2.83L17 18h-2.24l-1.5-2H11v-2zm0-4h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" />
+        </svg>
+      ),
+      label: "Rumble",
+      color: "#85c742",
+    },
+    reddit: {
+      icon: (
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="10" cy="10" r="10" />
+          <path
+            d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+            fill="white"
+          />
+        </svg>
+      ),
+      label: "Reddit",
+      color: "#ff4500",
     },
     image: {
       icon: <Image size={11} />,
@@ -407,8 +904,14 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
     },
   };
 
-  if (mediaType === "text" || mediaType === "uploaded_image") return null;
+  if (
+    mediaType === "text" ||
+    mediaType === "uploaded_image" ||
+    mediaType === "gif"
+  )
+    return null;
   const cfg = configs[mediaType];
+  if (!cfg) return null;
   return (
     <span
       className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded"
@@ -493,6 +996,42 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
         style={{ maxWidth: 280, maxHeight: 240 }}
       />
     );
+  }
+
+  if (mediaType === "rumble") {
+    const videoId = extractRumbleVideoId(url);
+    if (!videoId) {
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-xs break-all underline"
+          style={{ color: "#4a9e5c" }}
+        >
+          {url}
+        </a>
+      );
+    }
+    return (
+      <div
+        className="relative rounded overflow-hidden"
+        style={{ paddingBottom: "56.25%", height: 0, maxWidth: 320 }}
+      >
+        <iframe
+          src={`https://rumble.com/embed/${videoId}/`}
+          className="absolute inset-0 w-full h-full border-0 rounded"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          title="Rumble video"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      </div>
+    );
+  }
+
+  if (mediaType === "reddit") {
+    return <RedditEmbed url={url} />;
   }
 
   if (mediaType === "link") {
@@ -686,6 +1225,276 @@ function ReactionRow({
 }
 
 // ──────────────────────────────────────────────
+// Report Modal
+// ──────────────────────────────────────────────
+interface ReportModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+function ReportModal({ open, onClose }: ReportModalProps) {
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+
+  function handleSubmit() {
+    if (!selectedReason) {
+      toast.error("Please select a reason");
+      return;
+    }
+    toast.success("Report submitted");
+    setSelectedReason(null);
+    onClose();
+  }
+
+  function handleClose() {
+    setSelectedReason(null);
+    onClose();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) handleClose();
+      }}
+    >
+      <DialogContent
+        style={{
+          backgroundColor: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          color: "#e0e0e0",
+          maxWidth: 400,
+        }}
+        data-ocid="report.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle
+            className="font-mono text-sm"
+            style={{ color: "#e0e0e0" }}
+          >
+            Report message
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2 py-2">
+          <p className="font-mono text-xs mb-3" style={{ color: "#888" }}>
+            Select a reason for reporting this message:
+          </p>
+          {REPORT_REASONS.map((reason, i) => {
+            const isSelected = selectedReason === reason;
+            return (
+              <button
+                type="button"
+                key={reason}
+                onClick={() => setSelectedReason(reason)}
+                className="w-full text-left px-3 py-2.5 rounded-xl font-mono text-sm transition-all"
+                style={{
+                  backgroundColor: isSelected ? "#4a9e5c18" : "#111",
+                  border: `1px solid ${isSelected ? "#4a9e5c" : "#2a2a2a"}`,
+                  color: isSelected ? "#6abd7c" : "#ccc",
+                }}
+                data-ocid={`report.reason.radio.${i + 1}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: "50%",
+                      border: `2px solid ${isSelected ? "#4a9e5c" : "#444"}`,
+                      backgroundColor: isSelected ? "#4a9e5c" : "transparent",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isSelected && (
+                      <div
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: "50%",
+                          backgroundColor: "#fff",
+                        }}
+                      />
+                    )}
+                  </div>
+                  {reason}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="ghost"
+            onClick={handleClose}
+            className="font-mono text-xs"
+            style={{ color: "#888", border: "1px solid #2a2a2a" }}
+            data-ocid="report.cancel_button"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!selectedReason}
+            className="font-mono text-xs disabled:opacity-40"
+            style={{
+              backgroundColor: selectedReason ? "#4a9e5c" : "#1a1a1a",
+              color: selectedReason ? "#fff" : "#555",
+              border: "none",
+            }}
+            data-ocid="report.submit_button"
+          >
+            Submit Report
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Message Context Menu
+// ──────────────────────────────────────────────
+interface ContextMenuState {
+  x: number;
+  y: number;
+  post: Post;
+}
+
+interface MessageContextMenuProps {
+  state: ContextMenuState;
+  threadId: string;
+  onClose: () => void;
+  onReply: (post: Post) => void;
+  onReport: () => void;
+}
+
+function MessageContextMenu({
+  state,
+  threadId,
+  onClose,
+  onReply,
+  onReport,
+}: MessageContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Adjust position so menu doesn't overflow viewport
+  const [pos, setPos] = useState({ x: state.x, y: state.y });
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const rect = menu.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = state.x;
+    let y = state.y;
+    if (x + rect.width > vw) x = vw - rect.width - 8;
+    if (y + rect.height > vh) y = vh - rect.height - 8;
+    if (x < 8) x = 8;
+    if (y < 8) y = 8;
+    setPos({ x, y });
+  }, [state.x, state.y]);
+
+  function handleCopyText() {
+    navigator.clipboard.writeText(state.post.content ?? "").then(() => {
+      toast.success("Copied");
+    });
+    onClose();
+  }
+
+  function handleShare() {
+    const url = `${window.location.origin}/thread/${threadId}#post-${String(state.post.id)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success("Link copied");
+    });
+    onClose();
+  }
+
+  function handleReply() {
+    onReply(state.post);
+    onClose();
+  }
+
+  function handleReport() {
+    onReport();
+    onClose();
+  }
+
+  const menuItems = [
+    {
+      icon: <CornerUpLeft size={13} />,
+      label: "Reply",
+      onClick: handleReply,
+    },
+    {
+      icon: <Copy size={13} />,
+      label: "Copy Text",
+      onClick: handleCopyText,
+    },
+    {
+      icon: <Link2 size={13} />,
+      label: "Share",
+      onClick: handleShare,
+    },
+    {
+      icon: <Flag size={13} />,
+      label: "Report",
+      onClick: handleReport,
+      danger: true,
+    },
+  ];
+
+  return (
+    <>
+      {/* Backdrop */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss */}
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+        style={{ background: "transparent" }}
+      />
+      {/* Menu */}
+      <div
+        ref={menuRef}
+        className="fixed z-50 rounded-xl overflow-hidden shadow-2xl"
+        style={{
+          left: pos.x,
+          top: pos.y,
+          backgroundColor: "#1e1e1e",
+          border: "1px solid #2a2a2a",
+          minWidth: 160,
+          boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+        }}
+        data-ocid="thread.context_menu"
+      >
+        {menuItems.map((item, i) => (
+          <button
+            type="button"
+            key={item.label}
+            onClick={item.onClick}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 font-mono text-xs text-left transition-colors hover:bg-white/5"
+            style={{
+              color: item.danger ? "#e05555" : "#ccc",
+              borderBottom:
+                i < menuItems.length - 1 ? "1px solid #2a2a2a" : "none",
+            }}
+          >
+            <span style={{ color: item.danger ? "#e05555" : "#666" }}>
+              {item.icon}
+            </span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Chat bubble
 // ──────────────────────────────────────────────
 interface ChatBubbleProps {
@@ -697,9 +1506,12 @@ interface ChatBubbleProps {
   myUsername: string | undefined;
   replyMap: Record<string, string>;
   posts: Post[];
-  onReply: (post: Post) => void;
   reactionVersion: number;
   onReactionChange: () => void;
+  onContextMenu: (
+    e: React.MouseEvent | { clientX: number; clientY: number },
+    post: Post,
+  ) => void;
 }
 
 function ChatBubble({
@@ -711,9 +1523,9 @@ function ChatBubble({
   myUsername,
   replyMap,
   posts,
-  onReply,
   reactionVersion,
   onReactionChange,
+  onContextMenu,
 }: ChatBubbleProps) {
   const isOwn = post.authorSessionId === sessionId;
   const authorProfile = profileMap.get(post.authorSessionId);
@@ -724,15 +1536,51 @@ function ChatBubble({
   const mediaType = post.mediaType as MediaType;
   const postIdStr = String(post.id);
 
-  // Long press for mobile reply
+  // Long press for mobile context menu
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showReplyBtn, setShowReplyBtn] = useState(false);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const touchMoved = useRef(false);
 
-  function handleTouchStart() {
+  function handleTouchStart(e: React.TouchEvent) {
+    // Don't intercept touches on interactive children
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("a") ||
+      target.closest("img")
+    )
+      return;
+
+    touchMoved.current = false;
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+
     longPressTimer.current = setTimeout(() => {
-      setShowReplyBtn(true);
-      setTimeout(() => setShowReplyBtn(false), 3000);
+      if (!touchMoved.current && touchStartPos.current) {
+        onContextMenu(
+          {
+            clientX: touchStartPos.current.x,
+            clientY: touchStartPos.current.y,
+          },
+          post,
+        );
+      }
     }, 500);
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    const touch = e.touches[0];
+    if (touchStartPos.current) {
+      const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+      if (dx > 8 || dy > 8) {
+        touchMoved.current = true;
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+      }
+    }
   }
 
   function handleTouchEnd() {
@@ -740,6 +1588,11 @@ function ChatBubble({
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+  }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    onContextMenu(e, post);
   }
 
   // Reply reference
@@ -772,7 +1625,10 @@ function ChatBubble({
 
   const hasMedia = !!post.mediaUrl && mediaType !== "text";
   const isInlineImage =
-    post.mediaUrl && (mediaType === "uploaded_image" || mediaType === "image");
+    post.mediaUrl &&
+    (mediaType === "uploaded_image" ||
+      mediaType === "image" ||
+      mediaType === "gif");
 
   const avatarEl = (
     <img
@@ -796,8 +1652,15 @@ function ChatBubble({
       data-ocid={`thread.post.item.${index}`}
       id={`post-${postIdStr}`}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onContextMenu={handleContextMenu}
+      style={{
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
+        userSelect: "none",
+      }}
     >
       {/* Avatar */}
       {avatarEl}
@@ -877,8 +1740,19 @@ function ChatBubble({
             <InlineImageThumbnail src={post.mediaUrl} index={index} />
           )}
 
-          {/* Collapsible media */}
-          {hasMedia && !isInlineImage && (
+          {/* Link preview card (replaces CollapsibleMedia for "link" type) */}
+          {hasMedia &&
+            !isInlineImage &&
+            mediaType === "link" &&
+            post.mediaUrl && (
+              <LinkPreviewCard
+                url={post.mediaUrl}
+                preloadedMeta={post.linkPreview ?? undefined}
+              />
+            )}
+
+          {/* Collapsible media (for non-link, non-image media) */}
+          {hasMedia && !isInlineImage && mediaType !== "link" && (
             <CollapsibleMedia
               url={post.mediaUrl!}
               mediaType={mediaType}
@@ -887,7 +1761,7 @@ function ChatBubble({
             />
           )}
 
-          {/* Timestamp + reply button row */}
+          {/* Timestamp row (no reply button — reply via context menu) */}
           <div
             className={`flex items-center gap-1.5 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}
           >
@@ -897,17 +1771,6 @@ function ChatBubble({
             >
               {formatTime(createdAtMs)} · {timeAgo(createdAtMs)}
             </span>
-            {/* Desktop: hover-visible reply button */}
-            <button
-              type="button"
-              onClick={() => onReply(post)}
-              className={`p-0.5 rounded transition-all ${showReplyBtn ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-              style={{ color: "#4a9e5c" }}
-              title="Reply"
-              data-ocid="thread.reply_button"
-            >
-              <CornerUpLeft size={11} />
-            </button>
           </div>
         </div>
 
@@ -937,8 +1800,35 @@ function InlineMediaPreview({
   mediaType: MediaType;
   onDismiss: () => void;
 }) {
-  if (!url || mediaType === "text" || mediaType === "uploaded_image")
+  if (
+    !url ||
+    mediaType === "text" ||
+    mediaType === "uploaded_image" ||
+    mediaType === "gif"
+  )
     return null;
+
+  // For "link" type, show a mini link preview card using OG metadata
+  if (mediaType === "link") {
+    return (
+      <div
+        className="flex items-start gap-2 px-3 pt-2 pb-1"
+        data-ocid="thread.inline_preview_panel"
+      >
+        <LinkPreviewMini url={url} />
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors mt-1"
+          style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+          aria-label="Dismiss media preview"
+          data-ocid="thread.inline_preview_dismiss_button"
+        >
+          <X size={10} />
+        </button>
+      </div>
+    );
+  }
 
   let thumbnail: React.ReactNode = null;
 
@@ -1013,6 +1903,111 @@ function InlineMediaPreview({
       >
         <X size={10} />
       </button>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Mini link preview (for compose bar inline preview)
+// ──────────────────────────────────────────────
+function LinkPreviewMini({ url }: { url: string }) {
+  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+
+    if (ogMetadataCache.has(url)) {
+      const cached = ogMetadataCache.get(url)!;
+      setMeta(cached);
+      setStatus("ready");
+      return;
+    }
+
+    backendApi
+      .fetchOgMetadata(url)
+      .then((data) => {
+        if (cancelled) return;
+        ogMetadataCache.set(url, data);
+        setMeta(data);
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const hostname = (() => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  })();
+
+  return (
+    <div
+      className="flex items-center gap-2 flex-1 rounded-lg px-2.5 py-1.5"
+      style={{
+        backgroundColor: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        minWidth: 0,
+      }}
+    >
+      {status === "ready" && meta?.imageUrl && (
+        <img
+          src={meta.imageUrl}
+          alt={meta.title ?? hostname}
+          style={{
+            width: 36,
+            height: 36,
+            objectFit: "cover",
+            borderRadius: 4,
+            flexShrink: 0,
+          }}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      )}
+      {status === "loading" && (
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 4,
+            backgroundColor: "#2a2a2a",
+            flexShrink: 0,
+          }}
+        />
+      )}
+      <div className="flex flex-col min-w-0 flex-1">
+        {status === "ready" && meta?.title ? (
+          <span
+            className="font-mono text-[11px] font-bold truncate"
+            style={{ color: "#e0e0e0" }}
+          >
+            {meta.title}
+          </span>
+        ) : (
+          <span
+            className="font-mono text-[10px] truncate"
+            style={{ color: "#888" }}
+          >
+            {truncateUrl(url, 48)}
+          </span>
+        )}
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          {hostname}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1175,6 +2170,14 @@ export default function ThreadPage() {
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Media popover (image upload / GIF picker)
+  const [mediaPopoverOpen, setMediaPopoverOpen] = useState(false);
+  const [mediaPopoverTab, setMediaPopoverTab] = useState<"image" | "gif">(
+    "image",
+  );
+  const mediaButtonRef = useRef<HTMLButtonElement>(null);
+  const mediaPopoverRef = useRef<HTMLDivElement>(null);
+
   // Reply state
   const [replyToPost, setReplyToPost] = useState<Post | null>(null);
   const [replyMap, setReplyMap] = useState<Record<string, string>>({});
@@ -1184,6 +2187,12 @@ export default function ThreadPage() {
 
   // Mention autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  // Report modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const sessionId = getSessionId();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1261,6 +2270,30 @@ export default function ThreadPage() {
     const timer = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timer);
   }, [scrollToBottom]);
+
+  // Close context menu on scroll
+  useEffect(() => {
+    function handleScroll() {
+      setContextMenu(null);
+    }
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, []);
+
+  // Close media popover on outside click
+  useEffect(() => {
+    if (!mediaPopoverOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        mediaButtonRef.current?.contains(e.target as Node) ||
+        mediaPopoverRef.current?.contains(e.target as Node)
+      )
+        return;
+      setMediaPopoverOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [mediaPopoverOpen]);
 
   // My username for mention highlights
   const myProfile = profileMap.get(sessionId);
@@ -1386,6 +2419,44 @@ export default function ThreadPage() {
     }
   }
 
+  async function handleGifSelect(gifUrl: string) {
+    setMediaPopoverOpen(false);
+
+    const banned = await backendApi.isBanned(sessionId);
+    if (banned) {
+      toast.error("You are banned from posting.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await backendApi.createPost(
+        threadIdBig,
+        sessionId,
+        "",
+        gifUrl,
+        "gif",
+        null,
+      );
+      await loadData();
+    } catch {
+      toast.error("Failed to send GIF");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleBubbleContextMenu(
+    e: React.MouseEvent | { clientX: number; clientY: number },
+    post: Post,
+  ) {
+    setContextMenu({
+      x: (e as React.MouseEvent).clientX,
+      y: (e as React.MouseEvent).clientY,
+      post,
+    });
+  }
+
   const canSend =
     content.trim() !== "" || uploadedImage !== null || inlineMediaUrl !== "";
 
@@ -1414,12 +2485,39 @@ export default function ThreadPage() {
         finalMediaType = inlineMediaType;
       }
 
+      // Determine if we need to fetch & store a link preview.
+      // Only fetch for "link" type (non-embed URLs). Embed types
+      // (youtube, twitch, twitter, rumble, reddit) don't use link previews.
+      let linkPreview: backendApi.OgMetadata | null = null;
+      const previewUrlCandidate =
+        finalMediaType === "link" && finalMediaUrl
+          ? finalMediaUrl
+          : extractFirstLinkPreviewUrl(content.trim());
+
+      if (previewUrlCandidate) {
+        // Use cache if available to avoid duplicate backend calls
+        if (ogMetadataCache.has(previewUrlCandidate)) {
+          linkPreview = ogMetadataCache.get(previewUrlCandidate)!;
+        } else {
+          try {
+            linkPreview = await backendApi.fetchOgMetadata(previewUrlCandidate);
+            if (linkPreview) {
+              ogMetadataCache.set(previewUrlCandidate, linkPreview);
+            }
+          } catch {
+            // Non-blocking — send without preview if fetch fails
+            linkPreview = null;
+          }
+        }
+      }
+
       const newPost = await backendApi.createPost(
         threadIdBig,
         sessionId,
         content.trim(),
         finalMediaUrl,
         finalMediaType,
+        linkPreview,
       );
 
       // Store reply mapping if replying
@@ -1641,9 +2739,9 @@ export default function ThreadPage() {
                   myUsername={myUsername}
                   replyMap={replyMap}
                   posts={posts}
-                  onReply={setReplyToPost}
                   reactionVersion={reactionVersion}
                   onReactionChange={() => setReactionVersion((v) => v + 1)}
+                  onContextMenu={handleBubbleContextMenu}
                 />
               ))}
             </>
@@ -1745,20 +2843,111 @@ export default function ThreadPage() {
 
             {/* Main input row */}
             <div className="flex items-center gap-2 px-3 py-2.5">
-              {/* Image upload button */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="shrink-0 p-2 rounded-full transition-colors"
-                style={{
-                  color: uploadedImage ? "#4a9e5c" : "#555",
-                  backgroundColor: uploadedImage ? "#4a9e5c18" : "transparent",
-                }}
-                aria-label="Upload image"
-                data-ocid="thread.image_upload_button"
-              >
-                <ImagePlus size={16} />
-              </button>
+              {/* Combined media button (image + GIF) */}
+              <div className="relative shrink-0">
+                <button
+                  ref={mediaButtonRef}
+                  type="button"
+                  onClick={() => {
+                    setMediaPopoverOpen((v) => !v);
+                    setMediaPopoverTab("image");
+                  }}
+                  className="p-2 rounded-full transition-colors"
+                  style={{
+                    color:
+                      uploadedImage || mediaPopoverOpen ? "#4a9e5c" : "#555",
+                    backgroundColor:
+                      uploadedImage || mediaPopoverOpen
+                        ? "#4a9e5c18"
+                        : "transparent",
+                  }}
+                  aria-label="Media"
+                  data-ocid="thread.media_button"
+                >
+                  <ImagePlus size={16} />
+                </button>
+
+                {/* Media popover */}
+                {mediaPopoverOpen && (
+                  <div
+                    ref={mediaPopoverRef}
+                    className="absolute z-50"
+                    style={{
+                      bottom: "calc(100% + 8px)",
+                      left: 0,
+                    }}
+                    data-ocid="thread.media_popover"
+                  >
+                    <div
+                      className="flex flex-col rounded-xl overflow-hidden shadow-2xl"
+                      style={{
+                        backgroundColor: "#111",
+                        border: "1px solid #2a2a2a",
+                        minWidth: 160,
+                        boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      {/* Tab bar */}
+                      {mediaPopoverTab === "image" && (
+                        <div
+                          className="flex items-center gap-1 px-2 pt-2 pb-1"
+                          style={{ borderBottom: "1px solid #1e1e1e" }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setMediaPopoverTab("image")}
+                            className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-all"
+                            style={{
+                              backgroundColor: "#4a9e5c18",
+                              color: "#4a9e5c",
+                              border: "1px solid #4a9e5c44",
+                            }}
+                          >
+                            📎 Image
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMediaPopoverTab("gif")}
+                            className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-all"
+                            style={{
+                              backgroundColor: "transparent",
+                              color: "#555",
+                              border: "1px solid transparent",
+                            }}
+                          >
+                            GIF
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Image tab */}
+                      {mediaPopoverTab === "image" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fileInputRef.current?.click();
+                            setMediaPopoverOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-3 font-mono text-xs text-left transition-colors hover:bg-white/5"
+                          style={{ color: "#ccc" }}
+                          data-ocid="thread.image_upload_button"
+                        >
+                          <ImagePlus size={13} style={{ color: "#4a9e5c" }} />
+                          Upload image
+                        </button>
+                      )}
+
+                      {/* GIF tab */}
+                      {mediaPopoverTab === "gif" && (
+                        <GifPicker
+                          onSelect={handleGifSelect}
+                          onClose={() => setMediaPopoverOpen(false)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <input
                 ref={fileInputRef}
@@ -1807,6 +2996,28 @@ export default function ThreadPage() {
           </div>
         </div>
       )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <MessageContextMenu
+          state={contextMenu}
+          threadId={threadIdStr}
+          onClose={() => setContextMenu(null)}
+          onReply={(post) => {
+            setReplyToPost(post);
+            setContextMenu(null);
+          }}
+          onReport={() => {
+            setReportModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Report Modal */}
+      <ReportModal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+      />
     </div>
   );
 }

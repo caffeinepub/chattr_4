@@ -25,6 +25,12 @@ export const Ban = IDL.Record({
   'sessionId' : IDL.Text,
   'reason' : IDL.Text,
 });
+export const OgMetadata = IDL.Record({
+  'title' : IDL.Opt(IDL.Text),
+  'description' : IDL.Opt(IDL.Text),
+  'siteName' : IDL.Opt(IDL.Text),
+  'imageUrl' : IDL.Opt(IDL.Text),
+});
 export const Post = IDL.Record({
   'id' : IDL.Nat,
   'isDeleted' : IDL.Bool,
@@ -34,6 +40,7 @@ export const Post = IDL.Record({
   'authorSessionId' : IDL.Text,
   'mediaType' : IDL.Text,
   'threadId' : IDL.Nat,
+  'linkPreview' : IDL.Opt(OgMetadata),
 });
 export const Thread = IDL.Record({
   'id' : IDL.Nat,
@@ -52,6 +59,24 @@ export const UserProfile = IDL.Record({
   'username' : IDL.Text,
   'avatarUrl' : IDL.Opt(IDL.Text),
   'sessionId' : IDL.Text,
+});
+export const http_header = IDL.Record({
+  'value' : IDL.Text,
+  'name' : IDL.Text,
+});
+export const http_request_result = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
+export const TransformationInput = IDL.Record({
+  'context' : IDL.Vec(IDL.Nat8),
+  'response' : http_request_result,
+});
+export const TransformationOutput = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
 });
 
 export const idlService = IDL.Service({
@@ -84,7 +109,14 @@ export const idlService = IDL.Service({
   'addCategory' : IDL.Func([IDL.Text], [Category], []),
   'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
   'createPost' : IDL.Func(
-      [IDL.Nat, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+      [
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        IDL.Text,
+        IDL.Opt(OgMetadata),
+      ],
       [Post],
       [],
     ),
@@ -95,6 +127,10 @@ export const idlService = IDL.Service({
     ),
   'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'deletePost' : IDL.Func([IDL.Nat], [Post], []),
+  'fetchOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
+  'fetchRedditPostTitle' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+  'fetchRumbleThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+  'fetchTwitchThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
   'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
   'getAllProfiles' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
   'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
@@ -120,6 +156,11 @@ export const idlService = IDL.Service({
       [],
     ),
   'start' : IDL.Func([], [], []),
+  'transform' : IDL.Func(
+      [TransformationInput],
+      [TransformationOutput],
+      ['query'],
+    ),
   'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
   'updateUsername' : IDL.Func(
@@ -149,6 +190,12 @@ export const idlFactory = ({ IDL }) => {
     'sessionId' : IDL.Text,
     'reason' : IDL.Text,
   });
+  const OgMetadata = IDL.Record({
+    'title' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'siteName' : IDL.Opt(IDL.Text),
+    'imageUrl' : IDL.Opt(IDL.Text),
+  });
   const Post = IDL.Record({
     'id' : IDL.Nat,
     'isDeleted' : IDL.Bool,
@@ -158,6 +205,7 @@ export const idlFactory = ({ IDL }) => {
     'authorSessionId' : IDL.Text,
     'mediaType' : IDL.Text,
     'threadId' : IDL.Nat,
+    'linkPreview' : IDL.Opt(OgMetadata),
   });
   const Thread = IDL.Record({
     'id' : IDL.Nat,
@@ -176,6 +224,21 @@ export const idlFactory = ({ IDL }) => {
     'username' : IDL.Text,
     'avatarUrl' : IDL.Opt(IDL.Text),
     'sessionId' : IDL.Text,
+  });
+  const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const http_request_result = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
+  const TransformationInput = IDL.Record({
+    'context' : IDL.Vec(IDL.Nat8),
+    'response' : http_request_result,
+  });
+  const TransformationOutput = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
   });
   
   return IDL.Service({
@@ -208,7 +271,14 @@ export const idlFactory = ({ IDL }) => {
     'addCategory' : IDL.Func([IDL.Text], [Category], []),
     'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
     'createPost' : IDL.Func(
-        [IDL.Nat, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(OgMetadata),
+        ],
         [Post],
         [],
       ),
@@ -219,6 +289,10 @@ export const idlFactory = ({ IDL }) => {
       ),
     'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'deletePost' : IDL.Func([IDL.Nat], [Post], []),
+    'fetchOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
+    'fetchRedditPostTitle' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+    'fetchRumbleThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+    'fetchTwitchThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
     'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
     'getAllProfiles' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
     'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
@@ -244,6 +318,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'start' : IDL.Func([], [], []),
+    'transform' : IDL.Func(
+        [TransformationInput],
+        [TransformationOutput],
+        ['query'],
+      ),
     'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
     'updateUsername' : IDL.Func(

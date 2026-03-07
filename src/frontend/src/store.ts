@@ -11,7 +11,10 @@ export type MediaType =
   | "youtube"
   | "twitch"
   | "twitter"
-  | "uploaded_image";
+  | "rumble"
+  | "reddit"
+  | "uploaded_image"
+  | "gif";
 
 // ---------------------------------------------------------------
 // Session ID (localStorage only — not backend data)
@@ -94,6 +97,11 @@ export function detectMediaType(url: string): MediaType {
   if (lower.includes("twitch.tv")) return "twitch";
   if (lower.includes("twitter.com") || lower.includes("x.com"))
     return "twitter";
+  if (lower.includes("rumble.com")) return "rumble";
+  if (lower.includes("reddit.com") || lower.includes("redd.it"))
+    return "reddit";
+  if (lower.includes("giphy.com") || lower.includes("media.giphy.com"))
+    return "gif";
   if (/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/.test(lower)) return "image";
   if (/\.(mp4|webm|ogg|mov|avi)(\?|$)/.test(lower)) return "video";
   if (url.startsWith("http")) return "link";

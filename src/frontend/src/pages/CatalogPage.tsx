@@ -22,6 +22,9 @@ import type { Category, Post, Thread } from "../backendApi";
 import { detectMediaType, getSessionId } from "../store";
 import { getAllLastVisits } from "../utils/localReactions";
 
+// ─── OG metadata cache for catalog (module-level) ────────────────
+const catalogOgCache = new Map<string, backendApi.OgMetadata>();
+
 // A thread is considered "live" if it had activity within the last 10 minutes
 function isThreadLive(lastActivityNs: bigint): boolean {
   const lastActivityMs = backendApi.nsToMs(lastActivityNs);
@@ -92,6 +95,785 @@ function LiveDot({ live }: { live: boolean }) {
         boxShadow: live ? "0 0 6px #4a9e5c" : "none",
       }}
     />
+  );
+}
+
+// ─── Tweet text data ──────────────────────────────────────────────
+interface TweetCardData {
+  authorName: string;
+  text: string;
+}
+
+async function fetchTweetCardData(url: string): Promise<TweetCardData | null> {
+  try {
+    const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
+    const resp = await fetch(oembedUrl);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const div = document.createElement("div");
+    div.innerHTML = data.html ?? "";
+    const paragraphs = div.querySelectorAll("p");
+    const rawText =
+      paragraphs.length > 0
+        ? (paragraphs[0].textContent ?? "")
+        : (div.textContent ?? "");
+    const trimmed = rawText.trim().slice(0, 100);
+    return {
+      authorName: data.author_name ?? "X / Twitter",
+      text: trimmed,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Twitter thumbnail card ───────────────────────────────────────
+function TwitterThumbnailCard({ url }: { url: string }) {
+  const [cardData, setCardData] = useState<TweetCardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchTweetCardData(url).then((data) => {
+      if (!cancelled) {
+        setCardData(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#111",
+        border: "1px solid #2a2a2a",
+        padding: "8px 10px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 4,
+        }}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="white"
+          style={{ opacity: 0.7, flexShrink: 0 }}
+          aria-hidden="true"
+        >
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        </svg>
+        {loading ? (
+          <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+            Loading tweet…
+          </span>
+        ) : (
+          <span
+            className="font-mono text-[10px] font-semibold"
+            style={{ color: "#aaa" }}
+          >
+            {cardData?.authorName ?? "X / Twitter"}
+          </span>
+        )}
+      </div>
+      {!loading && cardData?.text && (
+        <p
+          className="font-mono text-[11px] leading-snug"
+          style={{
+            color: "#bbb",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            margin: 0,
+          }}
+        >
+          {cardData.text}
+          {cardData.text.length >= 100 ? "…" : ""}
+        </p>
+      )}
+      {!loading && !cardData && (
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          X / Twitter post
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Rumble thumbnail card (backend OG outcall) ───────────────────
+function RumbleThumbnailCard({ url }: { url: string }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    backendApi
+      .fetchOgMetadata(url)
+      .then((meta) => {
+        if (!cancelled) {
+          setThumbUrl(meta.imageUrl ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setThumbUrl(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          backgroundColor: "#111",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Loading…
+        </span>
+      </div>
+    );
+  }
+
+  if (thumbUrl) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          overflow: "hidden",
+          backgroundColor: "#111",
+          position: "relative",
+        }}
+      >
+        <img
+          src={thumbUrl}
+          alt="Rumble video thumbnail"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.35)",
+          }}
+        >
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              backgroundColor: "rgba(133,199,66,0.9)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="white"
+              aria-hidden="true"
+            >
+              <polygon points="6,4 20,12 6,20" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback badge when no thumbnail found
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#85c74222",
+        border: "1px solid #85c74255",
+        padding: "6px 10px",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="#85c742"
+        aria-hidden="true"
+        style={{ flexShrink: 0 }}
+      >
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h4c2.21 0 4 1.79 4 4 0 1.1-.45 2.1-1.17 2.83L17 18h-2.24l-1.5-2H11v-2zm0-4h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" />
+      </svg>
+      <span className="font-mono text-xs" style={{ color: "#85c742" }}>
+        Rumble video
+      </span>
+    </div>
+  );
+}
+
+// ─── Twitch thumbnail card (backend fetchTwitchThumbnail) ────────
+function TwitchThumbnailCard({ url }: { url: string }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setThumbUrl(null);
+
+    // Use backend HTTP outcall to fetch the real Twitch thumbnail
+    backendApi
+      .fetchTwitchThumbnail(url)
+      .then((result) => {
+        if (!cancelled) {
+          setThumbUrl(result ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setThumbUrl(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  function handleImgError() {
+    setThumbUrl(null);
+  }
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          backgroundColor: "#111",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Loading…
+        </span>
+      </div>
+    );
+  }
+
+  if (thumbUrl) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          overflow: "hidden",
+          backgroundColor: "#111",
+          position: "relative",
+        }}
+      >
+        <img
+          src={thumbUrl}
+          alt="Twitch stream thumbnail"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={handleImgError}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.35)",
+          }}
+        >
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              backgroundColor: "rgba(100,65,164,0.9)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="white"
+              aria-hidden="true"
+            >
+              <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback badge
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#6441a422",
+        border: "1px solid #6441a455",
+        padding: "6px 10px",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="#9147ff"
+        style={{ flexShrink: 0 }}
+        aria-hidden="true"
+      >
+        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+      </svg>
+      <span className="font-mono text-xs" style={{ color: "#9147ff" }}>
+        Twitch stream
+      </span>
+    </div>
+  );
+}
+
+// ─── Generic link thumbnail card (uses backend OG outcall) ────────
+function LinkThumbnailCard({ url }: { url: string }) {
+  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    if (catalogOgCache.has(url)) {
+      setMeta(catalogOgCache.get(url)!);
+      setLoading(false);
+      return;
+    }
+
+    backendApi.fetchOgMetadata(url).then((data) => {
+      if (!cancelled) {
+        catalogOgCache.set(url, data);
+        setMeta(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const hostname = (() => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  })();
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          backgroundColor: "#111",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Loading…
+        </span>
+      </div>
+    );
+  }
+
+  if (meta?.imageUrl) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          overflow: "hidden",
+          backgroundColor: "#111",
+          position: "relative",
+        }}
+      >
+        <img
+          src={meta.imageUrl}
+          alt={meta.title ?? hostname}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: "6px 8px",
+            background: "linear-gradient(transparent, rgba(0,0,0,0.7))",
+          }}
+        >
+          <span className="font-mono text-[10px]" style={{ color: "#ccc" }}>
+            {hostname}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: text card
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#111",
+        border: "1px solid #2a2a2a",
+        padding: "8px 10px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 4,
+        }}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#888"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          style={{ flexShrink: 0 }}
+        >
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+        <span
+          className="font-mono text-[10px] font-semibold"
+          style={{ color: "#888" }}
+        >
+          {hostname}
+        </span>
+      </div>
+      {meta?.title && (
+        <p
+          className="font-mono text-[11px] leading-snug"
+          style={{
+            color: "#bbb",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            margin: 0,
+          }}
+        >
+          {meta.title}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Extract a human-readable title from a Reddit URL ────────────
+function extractRedditTitleFromUrl(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname;
+    // /r/{sub}/comments/{id}/{title_slug}/
+    const match = pathname.match(/\/r\/([^/]+)\/comments\/[^/]+\/([^/]+)/);
+    if (match) {
+      const subreddit = match[1];
+      const titleSlug = match[2];
+      // Convert underscores/hyphens to spaces, decode URI, title-case
+      const humanTitle = decodeURIComponent(titleSlug)
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return humanTitle ? `${humanTitle} (r/${subreddit})` : `r/${subreddit}`;
+    }
+    // Just /r/{sub}
+    const subMatch = pathname.match(/\/r\/([^/]+)/);
+    if (subMatch) return `r/${subMatch[1]}`;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+// ─── Reddit card for catalog thumbnail ───────────────────────────
+function RedditThumbnailCard({ url }: { url: string }) {
+  const [title, setTitle] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    // Use backend OG metadata — backend now correctly returns titles with spaces
+    backendApi
+      .fetchOgMetadata(url)
+      .then((meta) => {
+        if (!cancelled) {
+          // Use meta.title as primary source; fall back to URL slug parsing
+          const resolvedTitle =
+            meta.title ?? extractRedditTitleFromUrl(url) ?? "Reddit post";
+          setTitle(resolvedTitle);
+          setImageUrl(meta.imageUrl ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTitle(extractRedditTitleFromUrl(url) ?? "Reddit post");
+          setImageUrl(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  // If we have an image, show 16:9 thumbnail with Reddit logo overlay + title below
+  if (!loading && imageUrl) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          borderRadius: 6,
+          marginBottom: 8,
+          backgroundColor: "#111",
+          border: "1px solid #2a2a2a",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            aspectRatio: "16 / 9",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <img
+            src={imageUrl}
+            alt="Reddit post"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 6,
+              left: 6,
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 20 20"
+              fill="#ff4500"
+              aria-hidden="true"
+            >
+              <circle cx="10" cy="10" r="10" fill="#ff4500" />
+              <path
+                d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+                fill="white"
+              />
+            </svg>
+          </div>
+        </div>
+        {title && (
+          <div style={{ padding: "6px 10px" }}>
+            <p
+              className="font-mono text-[11px] leading-snug"
+              style={{
+                color: "#bbb",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                margin: 0,
+              }}
+            >
+              {title}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Text-only card (no image)
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#111",
+        border: "1px solid #2a2a2a",
+        padding: "8px 10px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 4,
+        }}
+      >
+        {/* Reddit alien logo (Snoo) */}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 20 20"
+          fill="#ff4500"
+          aria-hidden="true"
+          style={{ flexShrink: 0 }}
+        >
+          <circle cx="10" cy="10" r="10" fill="#ff4500" />
+          <path
+            d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+            fill="white"
+          />
+        </svg>
+        <span
+          className="font-mono text-[10px] font-semibold"
+          style={{ color: "#ff4500" }}
+        >
+          Reddit
+        </span>
+      </div>
+      {loading ? (
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Loading post…
+        </span>
+      ) : title ? (
+        <p
+          className="font-mono text-[11px] leading-snug"
+          style={{
+            color: "#bbb",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            margin: 0,
+          }}
+        >
+          {title}
+        </p>
+      ) : (
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Reddit post
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -191,71 +973,23 @@ function ThreadCardThumbnail({ thread }: { thread: Thread }) {
   }
 
   if (type === "twitter") {
-    return (
-      <div
-        style={{
-          width: "100%",
-          borderRadius: 6,
-          marginBottom: 8,
-          backgroundColor: "#111",
-          border: "1px solid #2a2a2a",
-          padding: "8px 10px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        {/* X logo */}
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="white"
-          style={{ flexShrink: 0, opacity: 0.7 }}
-          aria-hidden="true"
-        >
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-        </svg>
-        <span
-          className="font-mono text-xs"
-          style={{ color: "#888", lineHeight: 1.4 }}
-        >
-          X / Twitter post
-        </span>
-      </div>
-    );
+    return <TwitterThumbnailCard url={url} />;
   }
 
   if (type === "twitch") {
-    return (
-      <div
-        style={{
-          width: "100%",
-          borderRadius: 6,
-          marginBottom: 8,
-          backgroundColor: "#6441a422",
-          border: "1px solid #6441a455",
-          padding: "6px 10px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="#9147ff"
-          style={{ flexShrink: 0 }}
-          aria-hidden="true"
-        >
-          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
-        </svg>
-        <span className="font-mono text-xs" style={{ color: "#9147ff" }}>
-          Twitch stream
-        </span>
-      </div>
-    );
+    return <TwitchThumbnailCard url={url} />;
+  }
+
+  if (type === "rumble") {
+    return <RumbleThumbnailCard url={url} />;
+  }
+
+  if (type === "reddit") {
+    return <RedditThumbnailCard url={url} />;
+  }
+
+  if (type === "link") {
+    return <LinkThumbnailCard url={url} />;
   }
 
   return null;
@@ -406,6 +1140,12 @@ interface TweetPreview {
   text: string;
 }
 
+// ─── Reddit preview data for dialog ──────────────────────────────
+interface DialogRedditPreview {
+  title: string;
+  subreddit: string;
+}
+
 export default function CatalogPage() {
   const navigate = useNavigate();
   const sessionId = getSessionId();
@@ -427,6 +1167,13 @@ export default function CatalogPage() {
   const [newUploadedImage, setNewUploadedImage] = useState<string | null>(null);
   const [tweetPreview, setTweetPreview] = useState<TweetPreview | null>(null);
   const [tweetLoading, setTweetLoading] = useState(false);
+  const [redditPreview, setRedditPreview] =
+    useState<DialogRedditPreview | null>(null);
+  const [redditLoading, setRedditLoading] = useState(false);
+  const [linkOgMeta, setLinkOgMeta] = useState<backendApi.OgMetadata | null>(
+    null,
+  );
+  const [linkOgLoading, setLinkOgLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
@@ -471,6 +1218,8 @@ export default function CatalogPage() {
     setNewMediaUrl(url);
     setNewUploadedImage(null);
     setTweetPreview(null);
+    setRedditPreview(null);
+    setLinkOgMeta(null);
 
     if (!url.trim()) {
       setNewMediaType("none");
@@ -482,6 +1231,41 @@ export default function CatalogPage() {
 
     if (detected === "twitter") {
       fetchTweetPreview(url);
+    } else if (detected === "reddit") {
+      fetchDialogRedditPreview(url);
+    } else if (detected === "link") {
+      fetchLinkOgPreview(url);
+    }
+  }
+
+  async function fetchLinkOgPreview(url: string) {
+    setLinkOgLoading(true);
+    setLinkOgMeta(null);
+    try {
+      const data = await backendApi.fetchOgMetadata(url);
+      catalogOgCache.set(url, data);
+      setLinkOgMeta(data);
+    } catch {
+      setLinkOgMeta({});
+    } finally {
+      setLinkOgLoading(false);
+    }
+  }
+
+  async function fetchDialogRedditPreview(url: string) {
+    setRedditLoading(true);
+    setRedditPreview(null);
+    try {
+      const meta = await backendApi.fetchOgMetadata(url);
+      if (meta.title) {
+        setRedditPreview({ title: meta.title, subreddit: "" });
+      } else {
+        setRedditPreview({ title: "Reddit post", subreddit: "" });
+      }
+    } catch {
+      setRedditPreview({ title: "Reddit post", subreddit: "" });
+    } finally {
+      setRedditLoading(false);
     }
   }
 
@@ -534,6 +1318,10 @@ export default function CatalogPage() {
     setNewUploadedImage(null);
     setTweetPreview(null);
     setTweetLoading(false);
+    setRedditPreview(null);
+    setRedditLoading(false);
+    setLinkOgMeta(null);
+    setLinkOgLoading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -606,8 +1394,7 @@ export default function CatalogPage() {
     newUploadedImage !== null ||
     (newMediaUrl.trim() !== "" &&
       newMediaType !== "none" &&
-      newMediaType !== "text" &&
-      newMediaType !== "link");
+      newMediaType !== "text");
 
   // Compute YouTube video ID for preview
   const youtubePreviewId =
@@ -824,7 +1611,7 @@ export default function CatalogPage() {
               {/* URL input */}
               {!newUploadedImage && (
                 <Input
-                  placeholder="Paste image, YouTube, Twitch, or X/Twitter URL..."
+                  placeholder="Paste image, YouTube, Twitch, Rumble, Reddit, or X/Twitter URL..."
                   value={newMediaUrl}
                   onChange={(e) => handleMediaUrlChange(e.target.value)}
                   className="font-mono text-sm mb-2"
@@ -1078,6 +1865,195 @@ export default function CatalogPage() {
                           {tweetPreview.text}
                           {tweetPreview.text.length >= 100 ? "…" : ""}
                         </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Rumble preview */}
+                  {newMediaType === "rumble" && (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        backgroundColor: "#85c74222",
+                        border: "1px solid #85c74255",
+                        borderRadius: 4,
+                        padding: "6px 10px",
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="#85c742"
+                        aria-hidden="true"
+                        style={{ flexShrink: 0 }}
+                      >
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h4c2.21 0 4 1.79 4 4 0 1.1-.45 2.1-1.17 2.83L17 18h-2.24l-1.5-2H11v-2zm0-4h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" />
+                      </svg>
+                      <span
+                        className="font-mono text-xs"
+                        style={{ color: "#85c742" }}
+                      >
+                        Rumble video
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Reddit preview */}
+                  {newMediaType === "reddit" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        backgroundColor: "#111",
+                        border: "1px solid #2a2a2a",
+                        borderRadius: 4,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 20 20"
+                          fill="#ff4500"
+                          aria-hidden="true"
+                          style={{ flexShrink: 0 }}
+                        >
+                          <circle cx="10" cy="10" r="10" fill="#ff4500" />
+                          <path
+                            d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+                            fill="white"
+                          />
+                        </svg>
+                        {redditLoading ? (
+                          <span
+                            className="font-mono text-xs"
+                            style={{ color: "#555" }}
+                          >
+                            Loading…
+                          </span>
+                        ) : (
+                          <>
+                            <span
+                              className="font-mono text-xs font-semibold"
+                              style={{ color: "#ff4500" }}
+                            >
+                              Reddit
+                            </span>
+                            {redditPreview?.subreddit && (
+                              <span
+                                className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                                style={{
+                                  backgroundColor: "#ff450022",
+                                  color: "#ff6633",
+                                  border: "1px solid #ff450033",
+                                }}
+                              >
+                                {redditPreview.subreddit}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {!redditLoading && redditPreview?.title && (
+                        <p
+                          className="font-mono text-xs"
+                          style={{ color: "#888", lineHeight: 1.5, margin: 0 }}
+                        >
+                          {redditPreview.title.slice(0, 100)}
+                          {redditPreview.title.length > 100 ? "…" : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Generic link preview (OG metadata) */}
+                  {newMediaType === "link" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        backgroundColor: "#111",
+                        border: "1px solid #2a2a2a",
+                        borderRadius: 4,
+                        padding: "8px 10px",
+                      }}
+                    >
+                      {linkOgLoading ? (
+                        <>
+                          <div
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 4,
+                              backgroundColor: "#2a2a2a",
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span
+                            className="font-mono text-xs"
+                            style={{ color: "#555" }}
+                          >
+                            Loading preview…
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {linkOgMeta?.imageUrl && (
+                            <img
+                              src={linkOgMeta.imageUrl}
+                              alt={linkOgMeta.title ?? "Link preview"}
+                              style={{
+                                width: 44,
+                                height: 44,
+                                objectFit: "cover",
+                                borderRadius: 4,
+                                flexShrink: 0,
+                              }}
+                              onError={(e) => {
+                                (
+                                  e.currentTarget as HTMLImageElement
+                                ).style.display = "none";
+                              }}
+                            />
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            {linkOgMeta?.title && (
+                              <p
+                                className="font-mono text-xs font-semibold truncate"
+                                style={{ color: "#e0e0e0", margin: 0 }}
+                              >
+                                {linkOgMeta.title}
+                              </p>
+                            )}
+                            <p
+                              className="font-mono text-[10px] truncate"
+                              style={{ color: "#555", margin: 0 }}
+                            >
+                              {(() => {
+                                try {
+                                  return new URL(newMediaUrl).hostname.replace(
+                                    /^www\./,
+                                    "",
+                                  );
+                                } catch {
+                                  return newMediaUrl;
+                                }
+                              })()}
+                            </p>
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

@@ -7,6 +7,7 @@ import * as backendApi from "../backendApi";
 import type { UserProfile } from "../backendApi";
 import { markOnboarded, setUsername } from "../store";
 import { generatePixelAvatar } from "../utils/pixelAvatar";
+import GifPicker from "./GifPicker";
 
 interface OnboardingModalProps {
   sessionId: string;
@@ -35,6 +36,7 @@ export default function OnboardingModal({
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -287,15 +289,49 @@ export default function OnboardingModal({
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="font-mono text-[10px] uppercase tracking-wider transition-colors"
-              style={{ color: "#555" }}
-              data-ocid="onboarding.avatar_upload_button"
-            >
-              {avatarPreview ? "Change avatar" : "Upload avatar (optional)"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGifPicker(false);
+                  fileInputRef.current?.click();
+                }}
+                className="font-mono text-[10px] uppercase tracking-wider transition-colors"
+                style={{ color: "#555" }}
+                data-ocid="onboarding.avatar_upload_button"
+              >
+                {avatarPreview ? "Change avatar" : "Upload avatar"}
+              </button>
+              <span
+                className="font-mono text-[10px]"
+                style={{ color: "#2a2a2a" }}
+              >
+                |
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowGifPicker((v) => !v)}
+                className="font-mono text-[10px] uppercase tracking-wider transition-colors"
+                style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
+                data-ocid="onboarding.gif_avatar_button"
+              >
+                🎞 Pick GIF
+              </button>
+            </div>
+
+            {/* Inline GIF picker */}
+            {showGifPicker && (
+              <div style={{ maxWidth: 300, width: "100%" }}>
+                <GifPicker
+                  onSelect={(gifUrl) => {
+                    setAvatarPreview(gifUrl);
+                    setAvatarDataUrl(gifUrl);
+                    setShowGifPicker(false);
+                  }}
+                  onClose={() => setShowGifPicker(false)}
+                />
+              </div>
+            )}
 
             <input
               ref={fileInputRef}

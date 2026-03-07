@@ -225,6 +225,7 @@ export async function createPost(
   content: string,
   mediaUrl: string | null,
   mediaType: string,
+  linkPreview: OgMetadata | null = null,
 ) {
   const actor = await getActor();
   return actor.createPost(
@@ -233,6 +234,7 @@ export async function createPost(
     content,
     mediaUrl,
     mediaType,
+    linkPreview,
   );
 }
 
@@ -314,5 +316,46 @@ export async function isUsernameTaken(username: string): Promise<boolean> {
     return await actor.isUsernameTaken(username);
   } catch {
     return false;
+  }
+}
+
+// ─── Rumble thumbnail (via backend HTTP outcall) ───────────────
+export async function fetchRumbleThumbnail(
+  url: string,
+): Promise<string | null> {
+  try {
+    const actor = await getActor();
+    return await actor.fetchRumbleThumbnail(url);
+  } catch {
+    return null;
+  }
+}
+
+// ─── OG metadata (via backend HTTP outcall) ────────────────────
+export type OgMetadata = {
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  siteName?: string;
+};
+
+export async function fetchOgMetadata(url: string): Promise<OgMetadata> {
+  try {
+    const actor = await getActor();
+    return await actor.fetchOgMetadata(url);
+  } catch {
+    return {};
+  }
+}
+
+// ─── Twitch thumbnail (via backend HTTP outcall) ───────────────
+export async function fetchTwitchThumbnail(
+  url: string,
+): Promise<string | null> {
+  try {
+    const actor = await getActor();
+    return await actor.fetchTwitchThumbnail(url);
+  } catch {
+    return null;
   }
 }

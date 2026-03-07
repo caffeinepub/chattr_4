@@ -14,6 +14,7 @@ import * as backendApi from "../backendApi";
 import type { UserProfile } from "../backendApi";
 import { setUsername as storeSetUsername } from "../store";
 import { generatePixelAvatar } from "../utils/pixelAvatar";
+import GifPicker from "./GifPicker";
 
 interface SettingsModalProps {
   open: boolean;
@@ -43,6 +44,7 @@ export default function SettingsModal({
   );
   const [avatarChanged, setAvatarChanged] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const defaultAvatar = generatePixelAvatar(sessionId, 72);
@@ -217,16 +219,51 @@ export default function SettingsModal({
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
-              style={{ color: "#555" }}
-              data-ocid="settings.avatar_upload_button"
-            >
-              <ImagePlus size={11} />
-              {avatarPreview ? "Change avatar" : "Upload avatar"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGifPicker(false);
+                  fileInputRef.current?.click();
+                }}
+                className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+                style={{ color: "#555" }}
+                data-ocid="settings.avatar_upload_button"
+              >
+                <ImagePlus size={11} />
+                {avatarPreview ? "Change" : "Upload"}
+              </button>
+              <span
+                className="font-mono text-[10px]"
+                style={{ color: "#2a2a2a" }}
+              >
+                |
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowGifPicker((v) => !v)}
+                className="font-mono text-[10px] uppercase tracking-wider transition-colors"
+                style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
+                data-ocid="settings.gif_avatar_button"
+              >
+                🎞 GIF
+              </button>
+            </div>
+
+            {/* Inline GIF picker */}
+            {showGifPicker && (
+              <div style={{ maxWidth: 300, width: "100%" }}>
+                <GifPicker
+                  onSelect={(gifUrl) => {
+                    setAvatarPreview(gifUrl);
+                    setAvatarDataUrl(gifUrl);
+                    setAvatarChanged(true);
+                    setShowGifPicker(false);
+                  }}
+                  onClose={() => setShowGifPicker(false)}
+                />
+              </div>
+            )}
 
             <input
               ref={fileInputRef}

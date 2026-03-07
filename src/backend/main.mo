@@ -2,17 +2,19 @@ import Map "mo:core/Map";
 import Time "mo:core/Time";
 import List "mo:core/List";
 import Nat "mo:core/Nat";
+import Int "mo:core/Int";
 import Array "mo:core/Array";
 import Iter "mo:core/Iter";
 import MixinStorage "blob-storage/Mixin";
-
+import OutCall "http-outcalls/outcall";
+import Text "mo:core/Text";
 import Runtime "mo:core/Runtime";
+
 
 
 actor {
   include MixinStorage();
 
-  // Data types
   type Category = {
     id : Nat;
     name : Text;
@@ -38,9 +40,10 @@ actor {
     authorSessionId : Text;
     content : Text;
     mediaUrl : ?Text;
-    mediaType : Text; // "text", "image", "video", etc.
+    mediaType : Text;
     createdAt : Int;
     isDeleted : Bool;
+    linkPreview : ?OgMetadata;
   };
 
   public type Ban = {
@@ -55,19 +58,24 @@ actor {
     avatarUrl : ?Text;
   };
 
+  public type OgMetadata = {
+    title : ?Text;
+    description : ?Text;
+    imageUrl : ?Text;
+    siteName : ?Text;
+  };
+
   var nextThreadId = 1;
   var nextPostId = 1;
   var nextCategoryId = 1;
   var seeded = false;
 
-  // Maps
   var categories = Map.empty<Nat, Category>();
   var threads = Map.empty<Nat, Thread>();
   var posts = Map.empty<Nat, Post>();
   var bans = Map.empty<Text, Ban>();
   var userProfiles = Map.empty<Text, UserProfile>();
 
-  // Categories
   public shared ({ caller }) func addCategory(name : Text) : async Category {
     let category : Category = {
       id = nextCategoryId;
@@ -91,7 +99,6 @@ actor {
     };
   };
 
-  // Threads
   public shared ({ caller }) func createThread(
     title : Text,
     categoryId : Nat,
@@ -143,13 +150,13 @@ actor {
     };
   };
 
-  // Posts
   public shared ({ caller }) func createPost(
     threadId : Nat,
     authorSessionId : Text,
     content : Text,
     mediaUrl : ?Text,
     mediaType : Text,
+    linkPreview : ?OgMetadata,
   ) : async Post {
     switch (threads.get(threadId)) {
       case (null) { Runtime.trap("Thread not found") };
@@ -167,11 +174,11 @@ actor {
           mediaType;
           createdAt = Time.now();
           isDeleted = false;
+          linkPreview;
         };
         posts.add(nextPostId, post);
         nextPostId += 1;
 
-        // Update thread post count and last activity
         let updatedThread : Thread = {
           thread with
           postCount = thread.postCount + 1;
@@ -204,7 +211,7 @@ actor {
     if (sortedPosts.size() <= 50) {
       sortedPosts;
     } else {
-      Array.tabulate<Post>(
+      Array.tabulate(
         50,
         func(i) { sortedPosts[i] },
       );
@@ -222,13 +229,10 @@ actor {
     };
   };
 
-  // Logging
   public shared ({ caller }) func logAction(_action : Text) : async () {
-    // No-op logging (placeholder)
-    // Can be enhanced to store logs if needed
+    ();
   };
 
-  // Bans
   public shared ({ caller }) func banUser(sessionId : Text, reason : Text) : async Ban {
     let ban : Ban = {
       sessionId;
@@ -256,7 +260,6 @@ actor {
     bans.containsKey(sessionId);
   };
 
-  // Seed default categories on first init
   public shared ({ caller }) func initialize() : async () {
     if (not seeded) {
       ignore await addCategory("Politics");
@@ -273,7 +276,6 @@ actor {
     await initialize();
   };
 
-  // User Profiles
   public shared ({ caller }) func registerUser(sessionId : Text, username : Text) : async {
     #ok : UserProfile;
     #err : Text;
@@ -351,5 +353,138 @@ actor {
     userProfiles.values().toArray().any(
       func(profile) { profile.username == username }
     );
+  };
+
+  public shared ({ caller }) func fetchRumbleThumbnail(url : Text) : async ?Text {
+    let pageText = await OutCall.httpGetRequest(url, [], transform);
+    findOgTag(pageText, "og:image");
+  };
+
+  public query ({ caller }) func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  func findSubstring(text : Text, pattern : Text) : ?Nat {
+    let t = text.toArray();
+    let p = pattern.toArray();
+    if (p.size() == 0 or p.size() > t.size()) {
+      return null;
+    };
+
+    var i = 0;
+    if (t.size() >= p.size()) {
+      while (i <= t.size() - p.size()) {
+        var match = true;
+        var j = 0;
+        while (j < p.size()) {
+          if (t[i + j] != p[j]) {
+            match := false;
+            j := p.size();
+          };
+          j += 1;
+        };
+        if (match) {
+          return ?i;
+        };
+        i += 1;
+      };
+    };
+    null;
+  };
+
+  func dropWhile(text : Text, pattern : Text) : Text {
+    let textArray = text.toArray();
+    let patternArray = pattern.toArray();
+    if (patternArray.size() >= textArray.size()) {
+      return "";
+    };
+    let dropCount = patternArray.size();
+    Text.fromIter(textArray.values().drop(Int.abs(dropCount).toNat()));
+  };
+
+  func extractRange(text : Text, start : Nat, size : Nat) : Text {
+    let textArray = text.toArray();
+    if (start >= textArray.size()) {
+      return "";
+    };
+    let rangeEnd = Nat.min(textArray.size(), start + size);
+    let rangeArray = Array.tabulate(
+      rangeEnd - start,
+      func(i) { textArray[start + i] },
+    );
+    Text.fromIter(rangeArray.values());
+  };
+
+  /**
+   * Fetches Open Graph metadata (title, description, image) from any URL.
+   * Returns null fields if not found.
+   */
+  public shared ({ caller }) func fetchOgMetadata(url : Text) : async OgMetadata {
+    let pageText = await OutCall.httpGetRequest(url, [], transform);
+
+    let title = findOgTag(pageText, "og:title");
+    let description = findOgTag(pageText, "og:description");
+    let imageUrl = findOgTag(pageText, "og:image");
+    let siteName = findOgTag(pageText, "og:site_name");
+
+    {
+      title;
+      description;
+      imageUrl;
+      siteName;
+    };
+  };
+
+  public shared ({ caller }) func fetchRedditPostTitle(url : Text) : async ?Text {
+    let metadata = await fetchOgMetadata(url);
+    metadata.title;
+  };
+
+  /**
+   * Fetches only the og:image Open Graph tag from a Twitch channel/stream.
+   * Returns ?Text (null if not found).
+   */
+  public shared ({ caller }) func fetchTwitchThumbnail(url : Text) : async ?Text {
+    let pageText = await OutCall.httpGetRequest(url, [], transform);
+    findOgTag(pageText, "og:image");
+  };
+
+  /**
+   * Finds the specified Open Graph tag's content value.
+   */
+  func findOgTag(html : Text, tag : Text) : ?Text {
+    switch (findSubstring(html, tag)) {
+      case (null) { null };
+      case (?tagPos) {
+        let searchRange = extractRange(html, tagPos, 1024);
+        switch (findSubstring(searchRange, "content=\"")) {
+          case (null) {
+            switch (findSubstring(searchRange, "content='")) {
+              case (null) { null };
+              case (?singleQuotePos) {
+                let afterContent = dropWhile(searchRange, "content='");
+                switch (findSubstring(afterContent, "'")) {
+                  case (null) { null };
+                  case (?endPos) {
+                    let tagValue = extractRange(afterContent, 0, endPos);
+                    if (tagValue.size() > 0) { ?tagValue } else { null };
+                  };
+                };
+              };
+            };
+          };
+          case (?contentPos) {
+            let afterContent = dropWhile(searchRange, "content=\"");
+            switch (findSubstring(afterContent, "\"")) {
+              case (null) { null };
+              case (?endPos) {
+                let tagValue = extractRange(afterContent, 0, endPos);
+                if (tagValue.size() > 0) { ?tagValue } else { null };
+              };
+            };
+          };
+        };
+      };
+    };
   };
 };
