@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import * as backendApi from "../backendApi";
-import type { Category, Thread } from "../backendApi";
+import type { Category, Thread, UserProfile } from "../backendApi";
 
 function timeAgo(tsMs: number): string {
   const diff = Date.now() - tsMs;
@@ -26,16 +26,27 @@ const CATEGORY_COLORS: Record<string, string> = {
 interface ArchiveCardProps {
   thread: Thread;
   categories: Category[];
+  profiles: UserProfile[];
   index: number;
   onClick: () => void;
 }
 
-function ArchiveCard({ thread, categories, index, onClick }: ArchiveCardProps) {
+function ArchiveCard({
+  thread,
+  categories,
+  profiles,
+  index,
+  onClick,
+}: ArchiveCardProps) {
   const category = categories.find((c) => c.id === thread.categoryId);
   const catColor = category
     ? (CATEGORY_COLORS[category.name] ?? "#555")
     : "#555";
   const lastActivityMs = backendApi.nsToMs(thread.lastActivity);
+  const creatorProfile = profiles.find(
+    (p) => p.sessionId === thread.creatorSessionId,
+  );
+  const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
 
   return (
     <div
@@ -99,7 +110,7 @@ function ArchiveCard({ thread, categories, index, onClick }: ArchiveCardProps) {
         </span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs" style={{ color: "#333" }}>
-            {thread.creatorSessionId}
+            {creatorName}
           </span>
           <span className="font-mono text-xs" style={{ color: "#2a2a2a" }}>
             {timeAgo(lastActivityMs)}
@@ -114,16 +125,19 @@ export default function ArchivePage() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<Thread[]>([]);
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<bigint | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    const [cats, threads] = await Promise.all([
+    const [cats, threads, allProfiles] = await Promise.all([
       backendApi.getCategories(),
       backendApi.getArchivedThreads(),
+      backendApi.getAllProfiles(),
     ]);
     setCategories(cats);
     setArchivedThreads(threads);
+    setProfiles(allProfiles);
     setLoading(false);
   }, []);
 
@@ -138,6 +152,11 @@ export default function ArchivePage() {
 
   const sorted = [...filtered].sort((a, b) =>
     Number(b.lastActivity - a.lastActivity),
+  );
+
+  // Only show categories that have at least one archived thread
+  const categoriesWithThreads = categories.filter((cat) =>
+    archivedThreads.some((t) => t.categoryId === cat.id),
   );
 
   return (
@@ -173,7 +192,7 @@ export default function ArchivePage() {
         >
           All
         </button>
-        {categories.map((cat) => {
+        {categoriesWithThreads.map((cat) => {
           const color = CATEGORY_COLORS[cat.name] ?? "#555";
           const active = selectedCategory === cat.id;
           return (
@@ -229,6 +248,7 @@ export default function ArchivePage() {
               key={String(thread.id)}
               thread={thread}
               categories={categories}
+              profiles={profiles}
               index={i + 1}
               onClick={() =>
                 navigate({

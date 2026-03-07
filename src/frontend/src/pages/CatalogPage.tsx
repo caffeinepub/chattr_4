@@ -77,6 +77,7 @@ function extractYouTubeId(url: string): string | null {
 interface ThreadCardProps {
   thread: Thread;
   categories: Category[];
+  profiles: backendApi.UserProfile[];
   index: number;
   mentionCount: number;
   onClick: () => void;
@@ -998,6 +999,7 @@ function ThreadCardThumbnail({ thread }: { thread: Thread }) {
 function ThreadCard({
   thread,
   categories,
+  profiles,
   index,
   mentionCount,
   onClick,
@@ -1006,6 +1008,10 @@ function ThreadCard({
   const live = isThreadLive(thread.lastActivity);
   const catColor = category ? getCategoryColor(category.name) : "#555";
   const createdAtMs = backendApi.nsToMs(thread.createdAt);
+  const creatorProfile = profiles.find(
+    (p) => p.sessionId === thread.creatorSessionId,
+  );
+  const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
 
   return (
     <div
@@ -1094,7 +1100,7 @@ function ThreadCard({
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs" style={{ color: "#444" }}>
-            {thread.creatorSessionId}
+            {creatorName}
           </span>
           <span className="font-mono text-xs" style={{ color: "#333" }}>
             {timeAgo(createdAtMs)}
@@ -1151,6 +1157,7 @@ export default function CatalogPage() {
   const sessionId = getSessionId();
   const [categories, setCategories] = useState<Category[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [profiles, setProfiles] = useState<backendApi.UserProfile[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<bigint | null>(null);
   const [showNewThread, setShowNewThread] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -1185,6 +1192,7 @@ export default function CatalogPage() {
     ]);
     setCategories(cats);
     setThreads(threadList.filter((t) => !t.isArchived && !t.isClosed));
+    setProfiles(profiles);
     setLoading(false);
 
     // Get my username for mention detection
@@ -1211,6 +1219,11 @@ export default function CatalogPage() {
   // Sort by lastActivity descending
   const sortedThreads = [...filteredThreads].sort((a, b) =>
     Number(b.lastActivity - a.lastActivity),
+  );
+
+  // Only show categories that have at least one active thread
+  const categoriesWithThreads = categories.filter((cat) =>
+    threads.some((t) => t.categoryId === cat.id),
   );
 
   // Handle media URL input change
@@ -1445,7 +1458,7 @@ export default function CatalogPage() {
         >
           All
         </button>
-        {categories.map((cat) => {
+        {categoriesWithThreads.map((cat) => {
           const color = getCategoryColor(cat.name);
           const active = selectedCategory === cat.id;
           return (
@@ -1492,6 +1505,7 @@ export default function CatalogPage() {
               key={String(thread.id)}
               thread={thread}
               categories={categories}
+              profiles={profiles}
               index={i + 1}
               mentionCount={mentionCounts[String(thread.id)] ?? 0}
               onClick={() =>
@@ -1580,6 +1594,8 @@ export default function CatalogPage() {
                   style={{
                     backgroundColor: "#1a1a1a",
                     border: "1px solid #2a2a2a",
+                    maxHeight: "200px",
+                    overflowY: "auto",
                   }}
                 >
                   {categories.map((cat) => (

@@ -21,6 +21,7 @@ import {
   Link2,
   Lock,
   SendHorizontal,
+  SmilePlus,
   Tv2,
   Twitter,
   Video,
@@ -1130,6 +1131,9 @@ interface ReactionRowProps {
   /** Force re-render from parent */
   reactionVersion: number;
   onReactionChange: () => void;
+  /** External picker state control — trigger button lives outside the bubble */
+  showPicker: boolean;
+  setShowPicker: (v: boolean) => void;
 }
 
 function ReactionRow({
@@ -1140,8 +1144,9 @@ function ReactionRow({
   counts,
   myReactions,
   onReactionChange,
+  showPicker,
+  setShowPicker,
 }: ReactionRowProps) {
-  const [showPicker, setShowPicker] = useState(false);
   const activeEmojis = REACTION_EMOJIS.filter((e) => (counts[e] ?? 0) > 0);
 
   async function toggleReaction(emoji: string) {
@@ -1173,6 +1178,8 @@ function ReactionRow({
     onReactionChange();
   }
 
+  if (activeEmojis.length === 0 && !showPicker) return null;
+
   return (
     <div
       className={`flex items-center gap-1 flex-wrap mt-1 ${isOwn ? "justify-end" : "justify-start"}`}
@@ -1203,28 +1210,9 @@ function ReactionRow({
         );
       })}
 
-      {/* Add reaction (+) button */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setShowPicker((v) => !v)}
-          className="inline-flex items-center justify-center font-mono text-[11px] w-6 h-6 rounded-full transition-all"
-          style={{
-            backgroundColor: showPicker
-              ? "#4a9e5c28"
-              : "rgba(255,255,255,0.04)",
-            border: showPicker
-              ? "1px solid #4a9e5c66"
-              : "1px solid rgba(255,255,255,0.08)",
-            color: "#666",
-          }}
-          title="Add reaction"
-          data-ocid="thread.reaction_picker_button"
-        >
-          +
-        </button>
-
-        {showPicker && (
+      {/* Emoji picker dropdown — opened from the external trigger button */}
+      {showPicker && (
+        <div className="relative">
           <div
             className="absolute z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl shadow-lg"
             style={{
@@ -1253,8 +1241,8 @@ function ReactionRow({
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1653,6 +1641,9 @@ function ChatBubble({
   // Display content with reply prefix stripped
   const visibleContent = displayContent;
 
+  // Hook must be called unconditionally before any early returns
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
   if (post.isDeleted) {
     return (
       <div
@@ -1688,15 +1679,99 @@ function ChatBubble({
         borderRadius: "50%",
         objectFit: "cover",
         flexShrink: 0,
-        alignSelf: "flex-end",
-        marginBottom: 2,
+        alignSelf: "flex-start",
+        marginTop: 2,
       }}
     />
   );
 
+  const reactionTrigger = (
+    <div className="relative self-start mt-1">
+      <button
+        type="button"
+        onClick={() => setShowReactionPicker((v) => !v)}
+        className="inline-flex items-center justify-center w-7 h-7 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+        style={{
+          backgroundColor: showReactionPicker
+            ? "#4a9e5c28"
+            : "rgba(255,255,255,0.04)",
+          border: showReactionPicker
+            ? "1px solid #4a9e5c66"
+            : "1px solid rgba(255,255,255,0.08)",
+          color: showReactionPicker ? "#6abd7c" : "#666",
+        }}
+        title="Add reaction"
+        data-ocid="thread.reaction_picker_button"
+      >
+        <SmilePlus size={14} />
+      </button>
+
+      {showReactionPicker && (
+        <div
+          className="absolute z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl shadow-lg"
+          style={{
+            backgroundColor: "#1e1e1e",
+            border: "1px solid #2a2a2a",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            bottom: "calc(100% + 6px)",
+            ...(isOwn ? { right: 0 } : { left: 0 }),
+            whiteSpace: "nowrap",
+          }}
+        >
+          {REACTION_EMOJIS.map((emoji) => (
+            <button
+              type="button"
+              key={emoji}
+              onClick={async () => {
+                setShowReactionPicker(false);
+                const myReactions = myReactionIndex.get(postIdStr) ?? new Map();
+                const existingPostId = myReactions.get(emoji);
+                if (existingPostId) {
+                  try {
+                    await backendApi.deletePost(BigInt(existingPostId));
+                  } catch {
+                    // ignore
+                  }
+                } else {
+                  try {
+                    const content = encodeReactionContent(
+                      sessionId,
+                      emoji,
+                      postIdStr,
+                    );
+                    await backendApi.createPost(
+                      BigInt(threadId),
+                      sessionId,
+                      content,
+                      null,
+                      "reaction",
+                      null,
+                    );
+                  } catch {
+                    // ignore
+                  }
+                }
+                onReactionChange();
+              }}
+              className="text-base leading-none p-1 rounded-lg transition-all hover:bg-white/10"
+              style={{
+                filter: (myReactionIndex.get(postIdStr) ?? new Map()).has(emoji)
+                  ? "drop-shadow(0 0 4px #4a9e5c)"
+                  : "none",
+              }}
+              title={emoji}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
-      className={`flex items-end gap-2 mb-2 group ${isOwn ? "flex-row-reverse" : "flex-row"}`}
+      className={`flex items-start gap-2 mb-2 group ${isOwn ? "flex-row-reverse" : "flex-row"}`}
       data-ocid={`thread.post.item.${index}`}
       id={`post-${postIdStr}`}
       onTouchStart={handleTouchStart}
@@ -1710,7 +1785,7 @@ function ChatBubble({
         userSelect: "none",
       }}
     >
-      {/* Avatar */}
+      {/* Avatar — top-aligned with username */}
       {avatarEl}
 
       {/* Bubble + reactions column */}
@@ -1834,7 +1909,7 @@ function ChatBubble({
           </div>
         </div>
 
-        {/* Reaction row (below the bubble) */}
+        {/* Reaction pills (below the bubble) */}
         <ReactionRow
           threadId={threadId}
           postId={postIdStr}
@@ -1844,8 +1919,13 @@ function ChatBubble({
           myReactions={myReactionIndex.get(postIdStr) ?? new Map()}
           reactionVersion={reactionVersion}
           onReactionChange={onReactionChange}
+          showPicker={showReactionPicker}
+          setShowPicker={setShowReactionPicker}
         />
       </div>
+
+      {/* Reaction trigger button — left of bubble for others, right for own */}
+      {reactionTrigger}
     </div>
   );
 }
