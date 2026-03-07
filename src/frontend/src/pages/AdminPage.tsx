@@ -1,0 +1,719 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
+import {
+  type Ban,
+  type Category,
+  type Post,
+  type Thread,
+  addCategory,
+  banUser,
+  deleteCategory,
+  deletePost,
+  deleteThread,
+  getBans,
+  getCategories,
+  getPosts,
+  getThreads,
+  saveCategories,
+  unbanUser,
+  updateThread,
+} from "../store";
+
+const ADMIN_PASSWORD = "lunasimbaliamsammy123";
+
+function timeAgo(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+function PasswordGate({ onAuth }: { onAuth: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (password === ADMIN_PASSWORD) {
+      onAuth();
+      setError("");
+    } else {
+      setError("Invalid password. Access denied.");
+    }
+  }
+
+  return (
+    <div className="max-w-sm mx-auto px-4 py-24">
+      <div
+        className="rounded p-6"
+        style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+      >
+        <h1
+          className="font-mono text-lg font-bold mb-1"
+          style={{ color: "#4a9e5c" }}
+        >
+          {"//ADMIN"}
+        </h1>
+        <p className="font-mono text-xs mb-6" style={{ color: "#444" }}>
+          Password required
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Input
+            type="password"
+            placeholder="Enter admin password..."
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="font-mono text-sm"
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #2a2a2a",
+              color: "#e0e0e0",
+            }}
+            data-ocid="admin.password_input"
+            autoFocus
+          />
+          {error && (
+            <p
+              className="font-mono text-xs"
+              style={{ color: "#c0392b" }}
+              data-ocid="admin.error_state"
+            >
+              {error}
+            </p>
+          )}
+          <Button
+            type="submit"
+            className="w-full font-mono text-xs uppercase tracking-wider"
+            style={{ backgroundColor: "#4a9e5c", color: "#0d0d0d" }}
+            data-ocid="admin.login_button"
+          >
+            Authenticate
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Threads Tab ─────────────────────────────────────────────
+function ThreadsTab() {
+  const [threads, setThreads] = useState<Thread[]>(() => getThreads());
+  const categories = getCategories();
+
+  const refresh = () => setThreads(getThreads());
+
+  function getCatName(id: number) {
+    return categories.find((c) => c.id === id)?.name ?? "?";
+  }
+
+  return (
+    <div>
+      <h2
+        className="font-mono text-sm font-bold mb-4"
+        style={{ color: "#888" }}
+      >
+        All Threads ({threads.length})
+      </h2>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow style={{ borderColor: "#2a2a2a" }}>
+              {["Title", "Category", "Posts", "Status", "Actions"].map((h) => (
+                <TableHead
+                  key={h}
+                  className="font-mono text-xs uppercase"
+                  style={{ color: "#555" }}
+                >
+                  {h}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {threads.map((thread, i) => (
+              <TableRow
+                key={thread.id}
+                style={{ borderColor: "#1a1a1a" }}
+                data-ocid={`admin.thread.row.${i + 1}`}
+              >
+                <TableCell
+                  className="font-sans text-sm max-w-xs truncate"
+                  style={{ color: "#ccc" }}
+                >
+                  {thread.title}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#888" }}
+                >
+                  {getCatName(thread.categoryId)}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#888" }}
+                >
+                  {thread.postCount}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1 flex-wrap">
+                    {thread.isArchived && (
+                      <span
+                        className="font-mono text-xs px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: "#33333322", color: "#666" }}
+                      >
+                        archived
+                      </span>
+                    )}
+                    {thread.isClosed && (
+                      <span
+                        className="font-mono text-xs px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: "#c0392b22",
+                          color: "#c0392b",
+                        }}
+                      >
+                        closed
+                      </span>
+                    )}
+                    {!thread.isArchived && !thread.isClosed && (
+                      <span
+                        className="font-mono text-xs px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: "#4a9e5c22",
+                          color: "#4a9e5c",
+                        }}
+                      >
+                        active
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {!thread.isClosed && (
+                      <button
+                        type="button"
+                        className="font-mono text-xs px-2 py-1 rounded transition-colors"
+                        style={{ border: "1px solid #444", color: "#888" }}
+                        onClick={() => {
+                          updateThread(thread.id, { isClosed: true });
+                          toast.success("Thread closed");
+                          refresh();
+                        }}
+                        data-ocid="admin.thread.secondary_button"
+                      >
+                        Close
+                      </button>
+                    )}
+                    {thread.isClosed && !thread.isArchived && (
+                      <button
+                        type="button"
+                        className="font-mono text-xs px-2 py-1 rounded transition-colors"
+                        style={{
+                          border: "1px solid #4a9e5c44",
+                          color: "#4a9e5c",
+                        }}
+                        onClick={() => {
+                          updateThread(thread.id, { isClosed: false });
+                          toast.success("Thread reopened");
+                          refresh();
+                        }}
+                        data-ocid="admin.thread.secondary_button"
+                      >
+                        Reopen
+                      </button>
+                    )}
+                    {!thread.isArchived && (
+                      <button
+                        type="button"
+                        className="font-mono text-xs px-2 py-1 rounded transition-colors"
+                        style={{ border: "1px solid #55555544", color: "#777" }}
+                        onClick={() => {
+                          updateThread(thread.id, {
+                            isArchived: true,
+                            isClosed: true,
+                          });
+                          toast.success("Thread archived");
+                          refresh();
+                        }}
+                        data-ocid="admin.thread.secondary_button"
+                      >
+                        Archive
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="font-mono text-xs px-2 py-1 rounded transition-colors"
+                      style={{
+                        border: "1px solid #c0392b44",
+                        color: "#c0392b",
+                      }}
+                      onClick={() => {
+                        if (confirm("Delete this thread and all its posts?")) {
+                          deleteThread(thread.id);
+                          toast.success("Thread deleted");
+                          refresh();
+                        }
+                      }}
+                      data-ocid="admin.thread.delete_button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Posts Tab ────────────────────────────────────────────────
+function PostsTab() {
+  const [posts, setPosts] = useState<Post[]>(() =>
+    getPosts()
+      .filter((p) => !p.isDeleted)
+      .slice(-50)
+      .reverse(),
+  );
+
+  const refresh = () =>
+    setPosts(
+      getPosts()
+        .filter((p) => !p.isDeleted)
+        .slice(-50)
+        .reverse(),
+    );
+
+  return (
+    <div>
+      <h2
+        className="font-mono text-sm font-bold mb-4"
+        style={{ color: "#888" }}
+      >
+        Recent Posts (last 50)
+      </h2>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow style={{ borderColor: "#2a2a2a" }}>
+              {["Author", "Thread", "Content", "Time", "Actions"].map((h) => (
+                <TableHead
+                  key={h}
+                  className="font-mono text-xs uppercase"
+                  style={{ color: "#555" }}
+                >
+                  {h}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {posts.map((post, i) => (
+              <TableRow
+                key={post.id}
+                style={{ borderColor: "#1a1a1a" }}
+                data-ocid={`admin.post.row.${i + 1}`}
+              >
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#e0e0e0" }}
+                >
+                  {post.authorDisplayId}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#888" }}
+                >
+                  #{post.threadId}
+                </TableCell>
+                <TableCell
+                  className="text-sm max-w-xs truncate"
+                  style={{ color: "#aaa" }}
+                >
+                  {post.content || `[${post.mediaType}]`}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#555" }}
+                >
+                  {timeAgo(post.createdAt)}
+                </TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    className="font-mono text-xs px-2 py-1 rounded"
+                    style={{ border: "1px solid #c0392b44", color: "#c0392b" }}
+                    onClick={() => {
+                      deletePost(post.id);
+                      toast.success("Post deleted");
+                      refresh();
+                    }}
+                    data-ocid="admin.post.delete_button"
+                  >
+                    Delete
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Bans Tab ─────────────────────────────────────────────────
+function BansTab() {
+  const [bans, setBans] = useState<Ban[]>(() => getBans());
+  const [banId, setBanId] = useState("");
+  const [banReason, setBanReason] = useState("");
+
+  const refresh = () => setBans(getBans());
+
+  function handleBan(e: React.FormEvent) {
+    e.preventDefault();
+    if (!banId.trim()) {
+      toast.error("User ID required");
+      return;
+    }
+    banUser(banId.trim(), banReason.trim() || "Violating board rules");
+    toast.success(`${banId} banned`);
+    setBanId("");
+    setBanReason("");
+    refresh();
+  }
+
+  return (
+    <div>
+      {/* Ban form */}
+      <div
+        className="rounded p-4 mb-6"
+        style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a" }}
+      >
+        <h3
+          className="font-mono text-xs uppercase tracking-wider mb-3"
+          style={{ color: "#888" }}
+        >
+          Ban User
+        </h3>
+        <form onSubmit={handleBan} className="flex gap-2 flex-wrap">
+          <Input
+            placeholder="User ID (e.g. A3kX9mP2)"
+            value={banId}
+            onChange={(e) => setBanId(e.target.value)}
+            className="font-mono text-xs w-40"
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #2a2a2a",
+              color: "#e0e0e0",
+            }}
+            data-ocid="admin.ban_user_input"
+          />
+          <Input
+            placeholder="Reason (optional)"
+            value={banReason}
+            onChange={(e) => setBanReason(e.target.value)}
+            className="font-mono text-xs flex-1"
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #2a2a2a",
+              color: "#e0e0e0",
+            }}
+            data-ocid="admin.ban_reason_input"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="font-mono text-xs uppercase shrink-0"
+            style={{ backgroundColor: "#c0392b", color: "#fff" }}
+            data-ocid="admin.ban_submit_button"
+          >
+            Ban
+          </Button>
+        </form>
+      </div>
+
+      {/* Bans list */}
+      <h2
+        className="font-mono text-sm font-bold mb-3"
+        style={{ color: "#888" }}
+      >
+        Active Bans ({bans.length})
+      </h2>
+      {bans.length === 0 ? (
+        <p
+          className="font-mono text-xs"
+          style={{ color: "#444" }}
+          data-ocid="admin.bans.empty_state"
+        >
+          No active bans.
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow style={{ borderColor: "#2a2a2a" }}>
+              {["User ID", "Reason", "Banned", "Actions"].map((h) => (
+                <TableHead
+                  key={h}
+                  className="font-mono text-xs uppercase"
+                  style={{ color: "#555" }}
+                >
+                  {h}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {bans.map((ban, i) => (
+              <TableRow
+                key={ban.displayId}
+                style={{ borderColor: "#1a1a1a" }}
+                data-ocid={`admin.ban.row.${i + 1}`}
+              >
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#e0e0e0" }}
+                >
+                  {ban.displayId}
+                </TableCell>
+                <TableCell className="text-sm" style={{ color: "#aaa" }}>
+                  {ban.reason}
+                </TableCell>
+                <TableCell
+                  className="font-mono text-xs"
+                  style={{ color: "#555" }}
+                >
+                  {timeAgo(ban.timestamp)}
+                </TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    className="font-mono text-xs px-2 py-1 rounded"
+                    style={{ border: "1px solid #4a9e5c44", color: "#4a9e5c" }}
+                    onClick={() => {
+                      unbanUser(ban.displayId);
+                      toast.success(`${ban.displayId} unbanned`);
+                      refresh();
+                    }}
+                    data-ocid="admin.ban.secondary_button"
+                  >
+                    Unban
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+// ─── Categories Tab ───────────────────────────────────────────
+function CategoriesTab() {
+  const [categories, setCategories] = useState<Category[]>(() =>
+    getCategories(),
+  );
+  const [newCatName, setNewCatName] = useState("");
+
+  const refresh = () => setCategories(getCategories());
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCatName.trim()) {
+      toast.error("Category name required");
+      return;
+    }
+    addCategory(newCatName.trim());
+    toast.success(`Category "${newCatName}" added`);
+    setNewCatName("");
+    refresh();
+  }
+
+  return (
+    <div>
+      {/* Add category form */}
+      <div
+        className="rounded p-4 mb-6"
+        style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a" }}
+      >
+        <h3
+          className="font-mono text-xs uppercase tracking-wider mb-3"
+          style={{ color: "#888" }}
+        >
+          Add Category
+        </h3>
+        <form onSubmit={handleAdd} className="flex gap-2">
+          <Input
+            placeholder="Category name..."
+            value={newCatName}
+            onChange={(e) => setNewCatName(e.target.value)}
+            className="font-mono text-xs flex-1"
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #2a2a2a",
+              color: "#e0e0e0",
+            }}
+            data-ocid="admin.add_category_input"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="font-mono text-xs uppercase shrink-0"
+            style={{ backgroundColor: "#4a9e5c", color: "#0d0d0d" }}
+            data-ocid="admin.add_category_button"
+          >
+            Add
+          </Button>
+        </form>
+      </div>
+
+      {/* Category list */}
+      <h2
+        className="font-mono text-sm font-bold mb-3"
+        style={{ color: "#888" }}
+      >
+        Categories ({categories.length})
+      </h2>
+      <div className="space-y-2">
+        {categories.map((cat, i) => (
+          <div
+            key={cat.id}
+            className="flex items-center justify-between px-3 py-2 rounded"
+            style={{ backgroundColor: "#141414", border: "1px solid #1a1a1a" }}
+            data-ocid={`admin.category.row.${i + 1}`}
+          >
+            <span className="font-mono text-sm" style={{ color: "#e0e0e0" }}>
+              {cat.name}
+            </span>
+            <button
+              type="button"
+              className="font-mono text-xs px-2 py-1 rounded"
+              style={{ border: "1px solid #c0392b44", color: "#c0392b" }}
+              onClick={() => {
+                if (confirm(`Delete category "${cat.name}"?`)) {
+                  deleteCategory(cat.id);
+                  toast.success(`Category "${cat.name}" deleted`);
+                  refresh();
+                }
+              }}
+              data-ocid="admin.category.delete_button"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Dashboard ──────────────────────────────────────────
+function AdminDashboard() {
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="flex items-center gap-3 mb-6">
+        <h1
+          className="font-mono text-xl font-bold"
+          style={{ color: "#4a9e5c" }}
+        >
+          {"//ADMIN"}
+        </h1>
+        <span
+          className="font-mono text-xs px-2 py-0.5 rounded"
+          style={{
+            backgroundColor: "#4a9e5c22",
+            color: "#4a9e5c",
+            border: "1px solid #4a9e5c44",
+          }}
+        >
+          AUTHENTICATED
+        </span>
+      </div>
+
+      <Tabs defaultValue="threads">
+        <TabsList
+          className="font-mono text-xs mb-6"
+          style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+        >
+          <TabsTrigger
+            value="threads"
+            className="font-mono text-xs uppercase tracking-wider"
+            data-ocid="admin.threads_tab"
+          >
+            Threads
+          </TabsTrigger>
+          <TabsTrigger
+            value="posts"
+            className="font-mono text-xs uppercase tracking-wider"
+            data-ocid="admin.posts_tab"
+          >
+            Posts
+          </TabsTrigger>
+          <TabsTrigger
+            value="bans"
+            className="font-mono text-xs uppercase tracking-wider"
+            data-ocid="admin.bans_tab"
+          >
+            Bans
+          </TabsTrigger>
+          <TabsTrigger
+            value="categories"
+            className="font-mono text-xs uppercase tracking-wider"
+            data-ocid="admin.categories_tab"
+          >
+            Categories
+          </TabsTrigger>
+        </TabsList>
+
+        <div
+          className="rounded p-4"
+          style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+        >
+          <TabsContent value="threads">
+            <ThreadsTab />
+          </TabsContent>
+          <TabsContent value="posts">
+            <PostsTab />
+          </TabsContent>
+          <TabsContent value="bans">
+            <BansTab />
+          </TabsContent>
+          <TabsContent value="categories">
+            <CategoriesTab />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Main export ──────────────────────────────────────────────
+export default function AdminPage() {
+  const [authed, setAuthed] = useState(false);
+
+  if (!authed) {
+    return <PasswordGate onAuth={() => setAuthed(true)} />;
+  }
+
+  return <AdminDashboard />;
+}
