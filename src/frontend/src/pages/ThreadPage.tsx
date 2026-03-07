@@ -3077,6 +3077,9 @@ export default function ThreadPage() {
     ? (CATEGORY_COLORS[category.name] ?? "#555")
     : "#555";
   const live = isThreadLive(threadIdNum);
+  const creatorProfile = profileMap.get(thread.creatorSessionId);
+  const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
+  const createdAtMs = backendApi.nsToMs(thread.createdAt);
 
   return (
     <div
@@ -3196,6 +3199,16 @@ export default function ThreadPage() {
                   )}
                 </button>
               )}
+            </div>
+
+            {/* ── Row 3: creator username + timestamp ── */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="font-mono text-[10px]" style={{ color: "#444" }}>
+                {creatorName}
+              </span>
+              <span className="font-mono text-[10px]" style={{ color: "#333" }}>
+                {timeAgo(createdAtMs)}
+              </span>
             </div>
           </div>
         </div>
