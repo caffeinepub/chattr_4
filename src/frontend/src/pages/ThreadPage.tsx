@@ -95,6 +95,11 @@ function truncateUrl(url: string, max = 48): string {
   return `${url.slice(0, max)}…`;
 }
 
+function extractFirstUrl(text: string): string | null {
+  const match = text.match(/(https?:\/\/[^\s]+)/i);
+  return match ? match[1] : null;
+}
+
 // ──────────────────────────────────────────────
 // Image Lightbox
 // ──────────────────────────────────────────────
@@ -662,6 +667,98 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
 }
 
 // ──────────────────────────────────────────────
+// Inline Media Preview (shown above compose input while typing)
+// ──────────────────────────────────────────────
+function InlineMediaPreview({
+  url,
+  mediaType,
+  onDismiss,
+}: {
+  url: string;
+  mediaType: MediaType;
+  onDismiss: () => void;
+}) {
+  if (!url || mediaType === "text" || mediaType === "uploaded_image")
+    return null;
+
+  let thumbnail: React.ReactNode = null;
+
+  if (mediaType === "image") {
+    thumbnail = (
+      <img
+        src={url}
+        alt="Preview"
+        style={{
+          height: 48,
+          width: 48,
+          objectFit: "cover",
+          borderRadius: 6,
+          flexShrink: 0,
+        }}
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+      />
+    );
+  } else if (mediaType === "youtube") {
+    const videoId = extractYouTubeId(url);
+    if (videoId) {
+      thumbnail = (
+        <img
+          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+          alt="YouTube thumbnail"
+          style={{
+            height: 48,
+            width: 72,
+            objectFit: "cover",
+            borderRadius: 6,
+            flexShrink: 0,
+          }}
+        />
+      );
+    } else {
+      thumbnail = <MediaTypeChip mediaType={mediaType} />;
+    }
+  } else {
+    thumbnail = <MediaTypeChip mediaType={mediaType} />;
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 px-3 pt-2 pb-1"
+      data-ocid="thread.inline_preview_panel"
+    >
+      <div
+        className="flex items-center gap-2 flex-1 rounded-lg px-2.5 py-1.5"
+        style={{
+          backgroundColor: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          minWidth: 0,
+        }}
+      >
+        {thumbnail}
+        <span
+          className="font-mono text-[10px] flex-1 truncate"
+          style={{ color: "#888" }}
+        >
+          {truncateUrl(url, 52)}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
+        style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+        aria-label="Dismiss media preview"
+        data-ocid="thread.inline_preview_dismiss_button"
+      >
+        <X size={10} />
+      </button>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Main page
 // ──────────────────────────────────────────────
 export default function ThreadPage() {
@@ -678,6 +775,8 @@ export default function ThreadPage() {
   const [content, setContent] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaType, setMediaType] = useState<MediaType>("text");
+  const [inlineMediaUrl, setInlineMediaUrl] = useState("");
+  const [inlineMediaType, setInlineMediaType] = useState<MediaType>("text");
   const [submitting, setSubmitting] = useState(false);
   const [showMediaInput, setShowMediaInput] = useState(false);
 
@@ -824,8 +923,23 @@ export default function ThreadPage() {
     }
   }
 
+  function handleContentChange(val: string) {
+    setContent(val);
+    const found = extractFirstUrl(val);
+    if (found) {
+      setInlineMediaUrl(found);
+      setInlineMediaType(detectMediaType(found));
+    } else {
+      setInlineMediaUrl("");
+      setInlineMediaType("text");
+    }
+  }
+
   const canSend =
-    content.trim() !== "" || mediaUrl.trim() !== "" || uploadedImage !== null;
+    content.trim() !== "" ||
+    mediaUrl.trim() !== "" ||
+    uploadedImage !== null ||
+    inlineMediaUrl !== "";
 
   async function handleSubmit() {
     if (!canSend) {
@@ -851,6 +965,9 @@ export default function ThreadPage() {
       } else if (mediaUrl.trim()) {
         finalMediaUrl = mediaUrl.trim();
         finalMediaType = mediaType;
+      } else if (inlineMediaUrl) {
+        finalMediaUrl = inlineMediaUrl;
+        finalMediaType = inlineMediaType;
       }
 
       await backendApi.createPost(
@@ -865,6 +982,8 @@ export default function ThreadPage() {
       setMediaType("text");
       setShowMediaInput(false);
       setUploadedImage(null);
+      setInlineMediaUrl("");
+      setInlineMediaType("text");
       await loadData();
     } catch {
       toast.error("Failed to send message");
@@ -1142,6 +1261,18 @@ export default function ThreadPage() {
               </div>
             )}
 
+            {/* Inline media preview (auto-detected URL from message text) */}
+            {inlineMediaUrl && inlineMediaType !== "text" && (
+              <InlineMediaPreview
+                url={inlineMediaUrl}
+                mediaType={inlineMediaType}
+                onDismiss={() => {
+                  setInlineMediaUrl("");
+                  setInlineMediaType("text");
+                }}
+              />
+            )}
+
             {/* Optional media URL row */}
             {showMediaInput && (
               <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
@@ -1208,7 +1339,7 @@ export default function ThreadPage() {
               <Input
                 placeholder="Message…"
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => handleContentChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="flex-1 h-10 border-0 focus-visible:ring-1 text-sm"
                 style={{

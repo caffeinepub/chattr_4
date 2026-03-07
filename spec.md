@@ -2,53 +2,48 @@
 
 ## Current State
 
-The app is a fully functional anonymous imageboard/chatroom with:
-- Catalog page (thread grid with category filters, new thread dialog)
-- Thread/chatroom page (WhatsApp-style chat bubbles, fixed compose bar, collapsible media embeds, image upload, Twitter oEmbed)
-- Archive page (closed/archived threads)
-- Admin page (password-gated: manage threads, posts, bans, categories)
+The thread page (ThreadPage.tsx) has a compose bar with:
+- A paperclip button that toggles a separate media URL input row
+- An image upload button (ImagePlus) for file uploads
+- A text input for message content
+- A send button
 
-**Critical problem**: All data (threads, posts, categories, bans) is stored in localStorage. Each user's browser has its own isolated state. Rooms created by User A are invisible to User B and vice versa.
+When a media URL is submitted (via the separate media URL row), the post renders:
+- The URL text shown in the bubble
+- A collapsible embed below (YouTube, Twitch, Twitter, image, video, link)
 
-The backend `main.mo` has type definitions only -- no public endpoints, no stable storage.
+Users must click the paperclip to reveal the media URL input — there is no auto-detection in the main text input.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Motoko backend stable storage for: categories, threads, posts, bans
-- Public backend query endpoints: getCategories, getThreads, getThread, getPostsByThread, getArchivedThreads
-- Public backend update endpoints: createThread, createPost, deletePost (soft delete), updateThread (close/archive/reopen), addCategory, deleteCategory, banUser, unbanUser, isBanned
-- Frontend `backendApi.ts` service layer that wraps all backend calls
-- Polling on catalog, thread, and archive pages to fetch fresh data from backend every 3-5 seconds
+- Auto-detect media URLs typed or pasted directly into the main message input (same regex patterns as `detectMediaType`)
+- Inline preview area above the compose bar that appears while typing when a media URL is detected in the message input
+  - Show a small preview: image thumbnail for image URLs, YouTube thumbnail for YouTube URLs, media type chip + truncated URL for Twitch/Twitter/video/link
+  - Show a dismiss/clear button on the preview
+- When a message containing a media URL is sent, post it with both the text content and the detected media embed (URL text visible in bubble + collapsible/inline embed below), same as existing behavior
 
 ### Modify
-- `store.ts`: keep only session ID logic and client-side helpers (detectMediaType, generateSessionId). Remove all localStorage data storage functions.
-- `CatalogPage.tsx`: replace all `store.*` data calls with `backendApi.*` async calls; show loading states
-- `ThreadPage.tsx`: replace all `store.*` data calls with `backendApi.*` async calls; image uploads still use base64 data URLs stored in the post mediaUrl field
-- `AdminPage.tsx`: replace all `store.*` data calls with `backendApi.*` async calls; seed categories on first load from backend
-- `ArchivePage.tsx`: replace all `store.*` data calls with `backendApi.*` async calls
-- `App.tsx`: remove `seedIfNeeded()` call; categories are seeded from backend on first deploy
+- Main text input `onChange`: after updating content state, also scan the input value for a media URL using `detectMediaType`; if found, update an `inlineMediaUrl` and `inlineMediaType` state; if not found, clear them
+- `handleSubmit`: if `inlineMediaUrl` is set (and no uploadedImage and no explicit mediaUrl from the paperclip), use `inlineMediaUrl` / `inlineMediaType` as the post's media fields
+- The paperclip + separate media URL row remain for users who want to attach a URL without it being in the message text
 
 ### Remove
-- All localStorage-based data functions from `store.ts` (getThreads, saveThreads, createThread, getPosts, savePosts, createPost, deletePost, updateThread, deleteThread, getCategories, saveCategories, addCategory, deleteCategory, getBans, saveBans, banUser, unbanUser, isBanned, seedIfNeeded)
-- `SEED_DONE_KEY` and seed logic in the frontend
+- Nothing removed
 
 ## Implementation Plan
 
-1. Generate Motoko backend with:
-   - Stable vars for categories (seeded with defaults on init), threads, posts, bans
-   - Full CRUD query/update functions for all entities
-   - Admin functions gated by a hardcoded admin password check on the backend (or keep password check on frontend only -- simpler)
-   - `uploaded_image` media type support (store base64 data URL as mediaUrl text)
-
-2. Update `backend.d.ts` with generated type bindings
-
-3. Create `src/frontend/src/backendApi.ts`:
-   - Thin async wrappers around each backend method
-   - Error handling with fallback to empty arrays
-
-4. Rewrite `store.ts` to only contain: session ID, detectMediaType, in-memory presence helpers, type definitions
-
-5. Update all four pages to be async, call backendApi, and handle loading/error states
-
-6. Remove `seedIfNeeded` from App.tsx
+1. Add two new state variables: `inlineMediaUrl: string` and `inlineMediaType: MediaType` (default `"text"`)
+2. Add a helper `extractFirstUrl(text: string): string | null` that finds the first URL-like token in the text using a regex
+3. On every `content` change in the main input, run `extractFirstUrl` → if found, run `detectMediaType` on it and set `inlineMediaUrl`/`inlineMediaType`; if not found, clear both
+4. Add an `InlinePreview` component rendered above the compose bar (between staged image preview and the main input row) that shows a compact preview of `inlineMediaUrl`:
+   - Image URLs: small thumbnail (max 60px) + filename/url
+   - YouTube: YouTube thumbnail image (via `https://img.youtube.com/vi/{id}/mqdefault.jpg`) + title chip
+   - Twitch/Twitter/video/link: MediaTypeChip + truncated URL
+   - Dismiss button (X) that clears `inlineMediaUrl`/`inlineMediaType` and does NOT clear message text
+5. In `handleSubmit`, priority order for media:
+   1. uploadedImage (existing behavior)
+   2. explicit mediaUrl from paperclip (existing behavior)
+   3. inlineMediaUrl detected from message text (new)
+6. After submit, clear `inlineMediaUrl` and `inlineMediaType` along with other state resets
+7. `canSend` already covers `content.trim() !== ""` which will be true when a URL is typed, so no change needed there
