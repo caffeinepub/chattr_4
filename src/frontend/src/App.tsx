@@ -8,19 +8,35 @@ import {
   createRouter,
   useRouterState,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { Settings } from "lucide-react";
+import { useEffect, useState } from "react";
 import { syncCategoriesToCanonical } from "./backendApi";
+import type { UserProfile } from "./backendApi";
+import * as backendApi from "./backendApi";
+import OnboardingModal from "./components/OnboardingModal";
+import SettingsModal from "./components/SettingsModal";
 import AdminPage from "./pages/AdminPage";
 import ArchivePage from "./pages/ArchivePage";
 import CatalogPage from "./pages/CatalogPage";
 import ThreadPage from "./pages/ThreadPage";
-import { getSessionId } from "./store";
+import { getSessionId, isOnboarded } from "./store";
+import { generatePixelAvatar } from "./utils/pixelAvatar";
 
 // ─── Header ───────────────────────────────────────────────────
-function Header() {
+function Header({
+  profile,
+  sessionId,
+  onProfileUpdated,
+}: {
+  profile: UserProfile | null;
+  sessionId: string;
+  onProfileUpdated: (p: UserProfile) => void;
+}) {
   const state = useRouterState();
   const currentPath = state.location.pathname;
-  const sessionId = getSessionId();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const avatarSrc = profile?.avatarUrl ?? generatePixelAvatar(sessionId, 28);
 
   const navLinks = [
     { to: "/" as const, label: "Catalog" },
@@ -28,57 +44,106 @@ function Header() {
   ];
 
   return (
-    <header
-      className="sticky top-0 z-50 border-b"
-      style={{
-        backgroundColor: "#111111",
-        borderBottomColor: "#2a2a2a",
-      }}
-    >
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
-        {/* Site name */}
-        <Link
-          to="/"
-          className="font-mono text-base sm:text-lg font-bold tracking-tight transition-colors shrink-0"
-          style={{ color: "#4a9e5c" }}
-          data-ocid="nav.link"
-        >
-          chattr
-        </Link>
+    <>
+      <header
+        className="sticky top-0 z-50 border-b"
+        style={{
+          backgroundColor: "#111111",
+          borderBottomColor: "#2a2a2a",
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
+          {/* Site name */}
+          <Link
+            to="/"
+            className="font-mono text-base sm:text-lg font-bold tracking-tight transition-colors shrink-0"
+            style={{ color: "#4a9e5c" }}
+            data-ocid="nav.link"
+          >
+            chattr
+          </Link>
 
-        {/* Nav */}
-        <nav className="flex items-center gap-4 sm:gap-5 overflow-hidden">
-          {navLinks.map((link) => {
-            const active =
-              currentPath === link.to ||
-              (link.to !== "/" && currentPath.startsWith(link.to));
-            return (
-              <Link
-                key={link.to}
-                to={link.to}
-                className="font-mono text-xs uppercase tracking-widest transition-colors whitespace-nowrap"
-                style={{
-                  color: active ? "#4a9e5c" : "#888888",
-                }}
-                data-ocid="nav.link"
-              >
-                <span className="hidden sm:inline">[ {link.label} ]</span>
-                <span className="sm:hidden">{link.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+          {/* Nav */}
+          <nav className="flex items-center gap-4 sm:gap-5 overflow-hidden">
+            {navLinks.map((link) => {
+              const active =
+                currentPath === link.to ||
+                (link.to !== "/" && currentPath.startsWith(link.to));
+              return (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className="font-mono text-xs uppercase tracking-widest transition-colors whitespace-nowrap"
+                  style={{
+                    color: active ? "#4a9e5c" : "#888888",
+                  }}
+                  data-ocid="nav.link"
+                >
+                  <span className="hidden sm:inline">[ {link.label} ]</span>
+                  <span className="sm:hidden">{link.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
 
-        {/* Session ID */}
-        <div
-          className="font-mono text-xs sm:text-xs shrink-0"
-          style={{ color: "#555" }}
-        >
-          <span>ID: </span>
-          <span style={{ color: "#888" }}>{sessionId}</span>
+          {/* User identity */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Avatar */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: visual only */}
+            <img
+              src={avatarSrc}
+              alt={profile?.username ?? sessionId}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "1px solid #2a2a2a",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+              onClick={() => setSettingsOpen(true)}
+              data-ocid="header.avatar"
+            />
+
+            {/* Username */}
+            <span
+              className="font-mono text-xs hidden sm:block"
+              style={{ color: "#888" }}
+              data-ocid="header.username"
+            >
+              {profile?.username ?? sessionId}
+            </span>
+
+            {/* Settings gear */}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="p-1.5 rounded transition-colors hover:bg-white/5"
+              style={{ color: "#555" }}
+              aria-label="Open settings"
+              data-ocid="header.settings_open_modal_button"
+            >
+              <Settings size={14} />
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Settings modal */}
+      {profile && (
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          sessionId={sessionId}
+          currentProfile={profile}
+          onProfileUpdated={(p) => {
+            onProfileUpdated(p);
+            setSettingsOpen(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -86,6 +151,24 @@ function Header() {
 function RootLayout() {
   const state = useRouterState();
   const isThreadPage = state.location.pathname.startsWith("/thread/");
+  const sessionId = getSessionId();
+
+  const [showOnboarding, setShowOnboarding] = useState(!isOnboarded());
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Load profile from backend on mount (after onboarding is done)
+  useEffect(() => {
+    if (isOnboarded()) {
+      backendApi.getProfile(sessionId).then((p) => {
+        if (p) setProfile(p);
+      });
+    }
+  }, [sessionId]);
+
+  function handleOnboardingComplete(p: UserProfile) {
+    setProfile(p);
+    setShowOnboarding(false);
+  }
 
   return (
     <div
@@ -98,7 +181,19 @@ function RootLayout() {
         ...(isThreadPage ? { height: "100dvh" } : {}),
       }}
     >
-      <Header />
+      {/* Forced onboarding modal — blocks all navigation */}
+      {showOnboarding && (
+        <OnboardingModal
+          sessionId={sessionId}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
+
+      <Header
+        profile={profile}
+        sessionId={sessionId}
+        onProfileUpdated={setProfile}
+      />
       <main
         className={
           isThreadPage ? "flex-1 overflow-hidden min-h-0 flex flex-col" : ""

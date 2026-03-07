@@ -38,6 +38,28 @@ export function getSessionId(): string {
 }
 
 // ---------------------------------------------------------------
+// Onboarding / Username (localStorage)
+// ---------------------------------------------------------------
+const ONBOARDING_KEY = "ib_onboarded";
+const USERNAME_KEY = "ib_username";
+
+export function getUsername(): string | null {
+  return localStorage.getItem(USERNAME_KEY);
+}
+
+export function setUsername(username: string): void {
+  localStorage.setItem(USERNAME_KEY, username);
+}
+
+export function isOnboarded(): boolean {
+  return localStorage.getItem(ONBOARDING_KEY) === "true";
+}
+
+export function markOnboarded(): void {
+  localStorage.setItem(ONBOARDING_KEY, "true");
+}
+
+// ---------------------------------------------------------------
 // In-memory presence map (per-tab, not persisted)
 // ---------------------------------------------------------------
 const presenceMap = new Map<number, Set<string>>();

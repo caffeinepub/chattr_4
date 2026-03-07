@@ -12,7 +12,7 @@ import type { Principal } from '@icp-sdk/core/principal';
 
 export interface Ban {
   'timestamp' : bigint,
-  'displayId' : string,
+  'sessionId' : string,
   'reason' : string,
 }
 export interface Category { 'id' : bigint, 'name' : string }
@@ -22,7 +22,7 @@ export interface Post {
   'content' : string,
   'createdAt' : bigint,
   'mediaUrl' : [] | [string],
-  'authorDisplayId' : string,
+  'authorSessionId' : string,
   'mediaType' : string,
   'threadId' : bigint,
 }
@@ -31,11 +31,18 @@ export interface Thread {
   'categoryId' : bigint,
   'postCount' : bigint,
   'title' : string,
+  'thumbnailUrl' : [] | [string],
+  'creatorSessionId' : string,
   'lastActivity' : bigint,
   'createdAt' : bigint,
-  'creatorDisplayId' : string,
   'isClosed' : boolean,
   'isArchived' : boolean,
+  'thumbnailType' : string,
+}
+export interface UserProfile {
+  'username' : string,
+  'avatarUrl' : [] | [string],
+  'sessionId' : string,
 }
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
@@ -70,23 +77,44 @@ export interface _SERVICE {
     [bigint, string, string, [] | [string], string],
     Post
   >,
-  'createThread' : ActorMethod<[string, bigint, string], Thread>,
+  'createThread' : ActorMethod<
+    [string, bigint, string, [] | [string], string],
+    Thread
+  >,
   'deleteCategory' : ActorMethod<[bigint], boolean>,
   'deletePost' : ActorMethod<[bigint], Post>,
   'getAllPosts' : ActorMethod<[], Array<Post>>,
+  'getAllProfiles' : ActorMethod<[], Array<UserProfile>>,
   'getAllThreads' : ActorMethod<[], Array<Thread>>,
   'getArchivedThreads' : ActorMethod<[], Array<Thread>>,
   'getBans' : ActorMethod<[], Array<Ban>>,
   'getCategories' : ActorMethod<[], Array<Category>>,
   'getPostsByThread' : ActorMethod<[bigint], Array<Post>>,
+  'getProfile' : ActorMethod<[string], [] | [UserProfile]>,
   'getThread' : ActorMethod<[bigint], [] | [Thread]>,
   'getThreads' : ActorMethod<[], Array<Thread>>,
   'initialize' : ActorMethod<[], undefined>,
   'isBanned' : ActorMethod<[string], boolean>,
+  'isUsernameTaken' : ActorMethod<[string], boolean>,
   'logAction' : ActorMethod<[string], undefined>,
+  'registerUser' : ActorMethod<
+    [string, string],
+    { 'ok' : UserProfile } |
+      { 'err' : string }
+  >,
+  'setAvatar' : ActorMethod<
+    [string, [] | [string]],
+    { 'ok' : UserProfile } |
+      { 'err' : string }
+  >,
   'start' : ActorMethod<[], undefined>,
   'unbanUser' : ActorMethod<[string], boolean>,
   'updateThread' : ActorMethod<[bigint, boolean, boolean], boolean>,
+  'updateUsername' : ActorMethod<
+    [string, string],
+    { 'ok' : UserProfile } |
+      { 'err' : string }
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

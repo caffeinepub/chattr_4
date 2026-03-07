@@ -22,7 +22,7 @@ export const _CaffeineStorageRefillResult = IDL.Record({
 export const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
 export const Ban = IDL.Record({
   'timestamp' : IDL.Int,
-  'displayId' : IDL.Text,
+  'sessionId' : IDL.Text,
   'reason' : IDL.Text,
 });
 export const Post = IDL.Record({
@@ -31,7 +31,7 @@ export const Post = IDL.Record({
   'content' : IDL.Text,
   'createdAt' : IDL.Int,
   'mediaUrl' : IDL.Opt(IDL.Text),
-  'authorDisplayId' : IDL.Text,
+  'authorSessionId' : IDL.Text,
   'mediaType' : IDL.Text,
   'threadId' : IDL.Nat,
 });
@@ -40,11 +40,18 @@ export const Thread = IDL.Record({
   'categoryId' : IDL.Nat,
   'postCount' : IDL.Nat,
   'title' : IDL.Text,
+  'thumbnailUrl' : IDL.Opt(IDL.Text),
+  'creatorSessionId' : IDL.Text,
   'lastActivity' : IDL.Int,
   'createdAt' : IDL.Int,
-  'creatorDisplayId' : IDL.Text,
   'isClosed' : IDL.Bool,
   'isArchived' : IDL.Bool,
+  'thumbnailType' : IDL.Text,
+});
+export const UserProfile = IDL.Record({
+  'username' : IDL.Text,
+  'avatarUrl' : IDL.Opt(IDL.Text),
+  'sessionId' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -81,23 +88,45 @@ export const idlService = IDL.Service({
       [Post],
       [],
     ),
-  'createThread' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Thread], []),
+  'createThread' : IDL.Func(
+      [IDL.Text, IDL.Nat, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+      [Thread],
+      [],
+    ),
   'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'deletePost' : IDL.Func([IDL.Nat], [Post], []),
   'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+  'getAllProfiles' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
   'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
   'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
   'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
+  'getProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
   'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
   'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'initialize' : IDL.Func([], [], []),
   'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'isUsernameTaken' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'logAction' : IDL.Func([IDL.Text], [], []),
+  'registerUser' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+      [],
+    ),
+  'setAvatar' : IDL.Func(
+      [IDL.Text, IDL.Opt(IDL.Text)],
+      [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+      [],
+    ),
   'start' : IDL.Func([], [], []),
   'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
+  'updateUsername' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -117,7 +146,7 @@ export const idlFactory = ({ IDL }) => {
   const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
   const Ban = IDL.Record({
     'timestamp' : IDL.Int,
-    'displayId' : IDL.Text,
+    'sessionId' : IDL.Text,
     'reason' : IDL.Text,
   });
   const Post = IDL.Record({
@@ -126,7 +155,7 @@ export const idlFactory = ({ IDL }) => {
     'content' : IDL.Text,
     'createdAt' : IDL.Int,
     'mediaUrl' : IDL.Opt(IDL.Text),
-    'authorDisplayId' : IDL.Text,
+    'authorSessionId' : IDL.Text,
     'mediaType' : IDL.Text,
     'threadId' : IDL.Nat,
   });
@@ -135,11 +164,18 @@ export const idlFactory = ({ IDL }) => {
     'categoryId' : IDL.Nat,
     'postCount' : IDL.Nat,
     'title' : IDL.Text,
+    'thumbnailUrl' : IDL.Opt(IDL.Text),
+    'creatorSessionId' : IDL.Text,
     'lastActivity' : IDL.Int,
     'createdAt' : IDL.Int,
-    'creatorDisplayId' : IDL.Text,
     'isClosed' : IDL.Bool,
     'isArchived' : IDL.Bool,
+    'thumbnailType' : IDL.Text,
+  });
+  const UserProfile = IDL.Record({
+    'username' : IDL.Text,
+    'avatarUrl' : IDL.Opt(IDL.Text),
+    'sessionId' : IDL.Text,
   });
   
   return IDL.Service({
@@ -176,23 +212,45 @@ export const idlFactory = ({ IDL }) => {
         [Post],
         [],
       ),
-    'createThread' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Thread], []),
+    'createThread' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [Thread],
+        [],
+      ),
     'deleteCategory' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'deletePost' : IDL.Func([IDL.Nat], [Post], []),
     'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
+    'getAllProfiles' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
     'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
     'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
     'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
+    'getProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
     'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
     'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'initialize' : IDL.Func([], [], []),
     'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'isUsernameTaken' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'logAction' : IDL.Func([IDL.Text], [], []),
+    'registerUser' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+        [],
+      ),
+    'setAvatar' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+        [],
+      ),
     'start' : IDL.Func([], [], []),
     'unbanUser' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'updateThread' : IDL.Func([IDL.Nat, IDL.Bool, IDL.Bool], [IDL.Bool], []),
+    'updateUsername' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+        [],
+      ),
   });
 };
 

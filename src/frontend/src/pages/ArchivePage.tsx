@@ -99,7 +99,7 @@ function ArchiveCard({ thread, categories, index, onClick }: ArchiveCardProps) {
         </span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs" style={{ color: "#333" }}>
-            {thread.creatorDisplayId}
+            {thread.creatorSessionId}
           </span>
           <span className="font-mono text-xs" style={{ color: "#2a2a2a" }}>
             {timeAgo(lastActivityMs)}

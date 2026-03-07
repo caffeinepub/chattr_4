@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  CornerUpLeft,
   Film,
   Image,
   ImagePlus,
@@ -19,7 +20,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
-import type { Category, Post, Thread } from "../backendApi";
+import type { Category, Post, Thread, UserProfile } from "../backendApi";
 import {
   type MediaType,
   detectMediaType,
@@ -28,6 +29,16 @@ import {
   joinThread,
   leaveThread,
 } from "../store";
+import {
+  addReaction,
+  getReactionCounts,
+  getReactions,
+  getReplyMap,
+  hasReaction,
+  recordThreadVisit,
+  removeReaction,
+  storeReply,
+} from "../utils/localReactions";
 import { generatePixelAvatar } from "../utils/pixelAvatar";
 
 // TypeScript declaration for Twitter widgets
@@ -40,6 +51,11 @@ declare global {
     };
   }
 }
+
+// ──────────────────────────────────────────────
+// Constants
+// ──────────────────────────────────────────────
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "👎"] as const;
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -106,6 +122,43 @@ function extractFirstUrl(text: string): string | null {
   return match ? match[1] : null;
 }
 
+function scrollToPost(postId: string): void {
+  document
+    .getElementById(`post-${postId}`)
+    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// Parse @mentions in content and render highlighted spans
+function renderMentions(
+  content: string,
+  myUsername: string | undefined,
+): React.ReactNode {
+  // Split on @word boundaries — produces stable parts from immutable content
+  const parts = content.split(/(@\w+)/g).map((part, i) => ({
+    text: part,
+    uid: `${i}-${part}`,
+  }));
+
+  return parts.map(({ text, uid }) => {
+    if (text.startsWith("@")) {
+      const mentioned = text.slice(1);
+      if (myUsername && mentioned.toLowerCase() === myUsername.toLowerCase()) {
+        return (
+          <span key={uid} style={{ color: "#4a9e5c", fontWeight: 600 }}>
+            {text}
+          </span>
+        );
+      }
+      return (
+        <span key={uid} style={{ color: "#8ecf9a" }}>
+          {text}
+        </span>
+      );
+    }
+    return <span key={uid}>{text}</span>;
+  });
+}
+
 // ──────────────────────────────────────────────
 // Image Lightbox
 // ──────────────────────────────────────────────
@@ -132,7 +185,6 @@ function ImageLightbox({
       onClick={onClose}
       data-ocid="thread.lightbox"
     >
-      {/* Close button */}
       <button
         type="button"
         onClick={(e) => {
@@ -147,7 +199,6 @@ function ImageLightbox({
         <X size={18} />
       </button>
 
-      {/* Image — stop click from closing via backdrop */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: stop propagation only */}
       <img
         src={src}
@@ -210,7 +261,6 @@ function InlineImageThumbnail({
 
 // ──────────────────────────────────────────────
 // Twitter / X Embed (oEmbed approach)
-// Imperative DOM injection to avoid React re-render wiping the widget
 // ──────────────────────────────────────────────
 function TwitterEmbed({ url }: { url: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -222,7 +272,6 @@ function TwitterEmbed({ url }: { url: string }) {
     let cancelled = false;
     setStatus("loading");
 
-    // Clear any previously injected content
     if (containerRef.current) {
       containerRef.current.innerHTML = "";
     }
@@ -237,7 +286,6 @@ function TwitterEmbed({ url }: { url: string }) {
       .then((data) => {
         if (cancelled || !containerRef.current) return;
 
-        // Imperatively inject HTML — never touch this div with React again
         containerRef.current.innerHTML = data.html;
         setStatus("injected");
 
@@ -254,7 +302,6 @@ function TwitterEmbed({ url }: { url: string }) {
                 if (!cancelled) setStatus("ready");
               });
           } else {
-            // Fallback: assume rendered after a short delay
             setTimeout(() => {
               if (!cancelled) setStatus("ready");
             }, 2500);
@@ -273,7 +320,6 @@ function TwitterEmbed({ url }: { url: string }) {
           script.onload = activateWidgets;
           document.body.appendChild(script);
         } else {
-          // Script already loaded — activate immediately (small delay for DOM settle)
           setTimeout(activateWidgets, 50);
         }
       })
@@ -302,7 +348,6 @@ function TwitterEmbed({ url }: { url: string }) {
 
   return (
     <div style={{ maxWidth: 320, minWidth: 260 }}>
-      {/* Loading placeholder — hidden once widget renders */}
       {(status === "loading" || status === "injected") && (
         <div
           style={{
@@ -317,7 +362,6 @@ function TwitterEmbed({ url }: { url: string }) {
           </span>
         </div>
       )}
-      {/* Container for imperatively injected oEmbed HTML — never re-rendered by React */}
       <div ref={containerRef} />
     </div>
   );
@@ -486,7 +530,6 @@ function CollapsibleMedia({
 
   return (
     <div className="mt-2">
-      {/* Preview row — always visible */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -513,7 +556,6 @@ function CollapsibleMedia({
         </span>
       </button>
 
-      {/* Expanded embed */}
       {expanded && (
         <div className="mt-2">
           <MediaEmbed url={url} mediaType={mediaType} />
@@ -524,21 +566,199 @@ function CollapsibleMedia({
 }
 
 // ──────────────────────────────────────────────
+// Reaction Row
+// ──────────────────────────────────────────────
+interface ReactionRowProps {
+  threadId: string;
+  postId: string;
+  sessionId: string;
+  isOwn: boolean;
+  /** Force re-render from parent */
+  reactionVersion: number;
+  onReactionChange: () => void;
+}
+
+function ReactionRow({
+  threadId,
+  postId,
+  sessionId,
+  isOwn,
+  onReactionChange,
+}: ReactionRowProps) {
+  const [showPicker, setShowPicker] = useState(false);
+  const counts = getReactionCounts(threadId, postId);
+  const activeEmojis = REACTION_EMOJIS.filter((e) => (counts[e] ?? 0) > 0);
+
+  function toggleReaction(emoji: string) {
+    if (hasReaction(threadId, postId, sessionId, emoji)) {
+      removeReaction(threadId, postId, sessionId, emoji);
+    } else {
+      addReaction(threadId, postId, sessionId, emoji);
+    }
+    setShowPicker(false);
+    onReactionChange();
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-1 flex-wrap mt-1 ${isOwn ? "justify-end" : "justify-start"}`}
+    >
+      {/* Active reaction pills */}
+      {activeEmojis.map((emoji) => {
+        const count = counts[emoji] ?? 0;
+        const mine = hasReaction(threadId, postId, sessionId, emoji);
+        return (
+          <button
+            type="button"
+            key={emoji}
+            onClick={() => toggleReaction(emoji)}
+            className="inline-flex items-center gap-0.5 font-mono text-[11px] px-1.5 py-0.5 rounded-full transition-all"
+            style={{
+              backgroundColor: mine ? "#4a9e5c28" : "rgba(255,255,255,0.06)",
+              border: mine
+                ? "1px solid #4a9e5c66"
+                : "1px solid rgba(255,255,255,0.1)",
+              color: mine ? "#6abd7c" : "#aaa",
+              lineHeight: 1,
+            }}
+            title={mine ? "Remove reaction" : "Add reaction"}
+          >
+            <span style={{ fontSize: 12 }}>{emoji}</span>
+            <span>{count}</span>
+          </button>
+        );
+      })}
+
+      {/* Add reaction (+) button */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowPicker((v) => !v)}
+          className="inline-flex items-center justify-center font-mono text-[11px] w-6 h-6 rounded-full transition-all"
+          style={{
+            backgroundColor: showPicker
+              ? "#4a9e5c28"
+              : "rgba(255,255,255,0.04)",
+            border: showPicker
+              ? "1px solid #4a9e5c66"
+              : "1px solid rgba(255,255,255,0.08)",
+            color: "#666",
+          }}
+          title="Add reaction"
+          data-ocid="thread.reaction_picker_button"
+        >
+          +
+        </button>
+
+        {showPicker && (
+          <div
+            className="absolute z-30 flex items-center gap-1 px-2 py-1.5 rounded-xl shadow-lg"
+            style={{
+              backgroundColor: "#1e1e1e",
+              border: "1px solid #2a2a2a",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              bottom: "calc(100% + 6px)",
+              ...(isOwn ? { right: 0 } : { left: 0 }),
+              whiteSpace: "nowrap",
+            }}
+          >
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                type="button"
+                key={emoji}
+                onClick={() => toggleReaction(emoji)}
+                className="text-base leading-none p-1 rounded-lg transition-all hover:bg-white/10"
+                style={{
+                  filter: hasReaction(threadId, postId, sessionId, emoji)
+                    ? "drop-shadow(0 0 4px #4a9e5c)"
+                    : "none",
+                }}
+                title={emoji}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Chat bubble
 // ──────────────────────────────────────────────
-function ChatBubble({ post, index }: { post: Post; index: number }) {
-  const sessionId = getSessionId();
-  const isOwn = post.authorDisplayId === sessionId;
-  const avatarSrc = generatePixelAvatar(post.authorDisplayId, 28);
+interface ChatBubbleProps {
+  post: Post;
+  index: number;
+  profileMap: Map<string, UserProfile>;
+  threadId: string;
+  sessionId: string;
+  myUsername: string | undefined;
+  replyMap: Record<string, string>;
+  posts: Post[];
+  onReply: (post: Post) => void;
+  reactionVersion: number;
+  onReactionChange: () => void;
+}
+
+function ChatBubble({
+  post,
+  index,
+  profileMap,
+  threadId,
+  sessionId,
+  myUsername,
+  replyMap,
+  posts,
+  onReply,
+  reactionVersion,
+  onReactionChange,
+}: ChatBubbleProps) {
+  const isOwn = post.authorSessionId === sessionId;
+  const authorProfile = profileMap.get(post.authorSessionId);
+  const displayName = authorProfile?.username ?? post.authorSessionId;
+  const avatarSrc =
+    authorProfile?.avatarUrl ?? generatePixelAvatar(post.authorSessionId, 28);
   const createdAtMs = backendApi.nsToMs(post.createdAt);
-  // mediaType from backend is a string; treat it as MediaType
   const mediaType = post.mediaType as MediaType;
+  const postIdStr = String(post.id);
+
+  // Long press for mobile reply
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showReplyBtn, setShowReplyBtn] = useState(false);
+
+  function handleTouchStart() {
+    longPressTimer.current = setTimeout(() => {
+      setShowReplyBtn(true);
+      setTimeout(() => setShowReplyBtn(false), 3000);
+    }, 500);
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  // Reply reference
+  const replyToPostId = replyMap[postIdStr] ?? null;
+  const replyToPost = replyToPostId
+    ? posts.find((p) => String(p.id) === replyToPostId)
+    : null;
+  const replyAuthorProfile = replyToPost
+    ? profileMap.get(replyToPost.authorSessionId)
+    : null;
+  const replyAuthorName =
+    replyAuthorProfile?.username ?? replyToPost?.authorSessionId ?? "";
 
   if (post.isDeleted) {
     return (
       <div
         className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}
         data-ocid={`thread.post.item.${index}`}
+        id={`post-${postIdStr}`}
       >
         <span
           className="font-mono text-xs italic px-3 py-1.5"
@@ -557,7 +777,7 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
   const avatarEl = (
     <img
       src={avatarSrc}
-      alt={post.authorDisplayId}
+      alt={displayName}
       style={{
         width: 28,
         height: 28,
@@ -572,70 +792,134 @@ function ChatBubble({ post, index }: { post: Post; index: number }) {
 
   return (
     <div
-      className={`flex items-end gap-2 mb-2 ${isOwn ? "flex-row-reverse" : "flex-row"}`}
+      className={`flex items-end gap-2 mb-2 group ${isOwn ? "flex-row-reverse" : "flex-row"}`}
       data-ocid={`thread.post.item.${index}`}
+      id={`post-${postIdStr}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
-      {/* Avatar — left for others, right for own */}
+      {/* Avatar */}
       {avatarEl}
 
-      {/* Bubble */}
+      {/* Bubble + reactions column */}
       <div
-        className="max-w-[72%] sm:max-w-[60%] rounded-2xl px-3.5 py-2.5"
-        style={
-          isOwn
-            ? {
-                backgroundColor: "#1a4d26",
-                borderBottomRightRadius: 4,
-                border: "1px solid #2d6b3a",
-              }
-            : {
-                backgroundColor: "#1e1e1e",
-                borderBottomLeftRadius: 4,
-                border: "1px solid #2a2a2a",
-              }
-        }
+        className={`flex flex-col max-w-[72%] sm:max-w-[60%] ${isOwn ? "items-end" : "items-start"}`}
       >
-        {/* Author label */}
+        {/* Bubble */}
         <div
-          className={`font-mono text-[10px] font-bold mb-0.5 ${isOwn ? "text-right" : "text-left"}`}
-          style={{ color: isOwn ? "#6abd7c" : "#4a9e5c" }}
+          className="rounded-2xl px-3.5 py-2.5 w-full"
+          style={
+            isOwn
+              ? {
+                  backgroundColor: "#1a4d26",
+                  borderBottomRightRadius: 4,
+                  border: "1px solid #2d6b3a",
+                }
+              : {
+                  backgroundColor: "#1e1e1e",
+                  borderBottomLeftRadius: 4,
+                  border: "1px solid #2a2a2a",
+                }
+          }
         >
-          {post.authorDisplayId}
-          {isOwn && <span className="ml-1 opacity-60">(you)</span>}
-        </div>
-
-        {/* Text content */}
-        {post.content && (
-          <p
-            className="text-sm leading-relaxed whitespace-pre-wrap break-words"
-            style={{ color: isOwn ? "#d4edda" : "#e0e0e0" }}
+          {/* Author label */}
+          <div
+            className={`font-mono text-[10px] font-bold mb-0.5 ${isOwn ? "text-right" : "text-left"}`}
+            style={{ color: isOwn ? "#6abd7c" : "#4a9e5c" }}
           >
-            {post.content}
-          </p>
-        )}
+            {displayName}
+            {isOwn && <span className="ml-1 opacity-60">(you)</span>}
+          </div>
 
-        {/* Inline image thumbnail */}
-        {isInlineImage && post.mediaUrl && (
-          <InlineImageThumbnail src={post.mediaUrl} index={index} />
-        )}
+          {/* Reply quote */}
+          {replyToPost && (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: scroll action
+            <div
+              className="mb-2 rounded-lg px-2.5 py-1.5 cursor-pointer"
+              style={{
+                backgroundColor: isOwn
+                  ? "rgba(0,0,0,0.25)"
+                  : "rgba(255,255,255,0.05)",
+                borderLeft: "3px solid #4a9e5c",
+              }}
+              onClick={() => scrollToPost(replyToPostId!)}
+            >
+              <p
+                className="font-mono text-[10px] font-bold mb-0.5"
+                style={{ color: "#4a9e5c" }}
+              >
+                {replyAuthorName}
+              </p>
+              <p
+                className="font-mono text-[10px] leading-snug line-clamp-2"
+                style={{ color: "#888" }}
+              >
+                {replyToPost.content
+                  ? replyToPost.content.slice(0, 80)
+                  : "[media]"}
+              </p>
+            </div>
+          )}
 
-        {/* Collapsible media (non-image types) */}
-        {hasMedia && !isInlineImage && (
-          <CollapsibleMedia
-            url={post.mediaUrl!}
-            mediaType={mediaType}
-            index={index}
-            isOwn={isOwn}
-          />
-        )}
+          {/* Text content with @mention highlights */}
+          {post.content && (
+            <p
+              className="text-sm leading-relaxed whitespace-pre-wrap break-words"
+              style={{ color: isOwn ? "#d4edda" : "#e0e0e0" }}
+            >
+              {renderMentions(post.content, myUsername)}
+            </p>
+          )}
 
-        {/* Timestamp */}
-        <div
-          className={`font-mono text-[10px] mt-1 ${isOwn ? "text-right" : "text-left"}`}
-          style={{ color: isOwn ? "#6abd7c88" : "#555" }}
-        >
-          {formatTime(createdAtMs)} · {timeAgo(createdAtMs)}
+          {/* Inline image thumbnail */}
+          {isInlineImage && post.mediaUrl && (
+            <InlineImageThumbnail src={post.mediaUrl} index={index} />
+          )}
+
+          {/* Collapsible media */}
+          {hasMedia && !isInlineImage && (
+            <CollapsibleMedia
+              url={post.mediaUrl!}
+              mediaType={mediaType}
+              index={index}
+              isOwn={isOwn}
+            />
+          )}
+
+          {/* Timestamp + reply button row */}
+          <div
+            className={`flex items-center gap-1.5 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}
+          >
+            <span
+              className="font-mono text-[10px]"
+              style={{ color: isOwn ? "#6abd7c88" : "#555" }}
+            >
+              {formatTime(createdAtMs)} · {timeAgo(createdAtMs)}
+            </span>
+            {/* Desktop: hover-visible reply button */}
+            <button
+              type="button"
+              onClick={() => onReply(post)}
+              className={`p-0.5 rounded transition-all ${showReplyBtn ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+              style={{ color: "#4a9e5c" }}
+              title="Reply"
+              data-ocid="thread.reply_button"
+            >
+              <CornerUpLeft size={11} />
+            </button>
+          </div>
         </div>
+
+        {/* Reaction row (below the bubble) */}
+        <ReactionRow
+          threadId={threadId}
+          postId={postIdStr}
+          sessionId={sessionId}
+          isOwn={isOwn}
+          reactionVersion={reactionVersion}
+          onReactionChange={onReactionChange}
+        />
       </div>
     </div>
   );
@@ -734,19 +1018,151 @@ function InlineMediaPreview({
 }
 
 // ──────────────────────────────────────────────
+// Reply Preview Bar (shown above compose when replying)
+// ──────────────────────────────────────────────
+function ReplyPreviewBar({
+  post,
+  profileMap,
+  onCancel,
+}: {
+  post: Post;
+  profileMap: Map<string, UserProfile>;
+  onCancel: () => void;
+}) {
+  const authorProfile = profileMap.get(post.authorSessionId);
+  const displayName = authorProfile?.username ?? post.authorSessionId;
+  const preview = post.content ? post.content.slice(0, 80) : "[media]";
+
+  return (
+    <div
+      className="flex items-center gap-2 px-3 pt-2 pb-1"
+      data-ocid="thread.reply_preview_panel"
+    >
+      <div
+        className="flex items-start gap-2 flex-1 rounded-lg px-2.5 py-1.5"
+        style={{
+          backgroundColor: "#1a1a1a",
+          borderLeft: "3px solid #4a9e5c",
+          border: "1px solid #2a2a2a",
+          borderLeftWidth: 3,
+          borderLeftColor: "#4a9e5c",
+          minWidth: 0,
+        }}
+      >
+        <CornerUpLeft
+          size={12}
+          style={{ color: "#4a9e5c", flexShrink: 0, marginTop: 2 }}
+        />
+        <div className="min-w-0">
+          <p
+            className="font-mono text-[10px] font-bold"
+            style={{ color: "#4a9e5c" }}
+          >
+            {displayName}
+          </p>
+          <p
+            className="font-mono text-[10px] truncate"
+            style={{ color: "#888" }}
+          >
+            {preview}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
+        style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+        aria-label="Cancel reply"
+        data-ocid="thread.reply_preview_cancel_button"
+      >
+        <X size={10} />
+      </button>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// @Mention Autocomplete Dropdown
+// ──────────────────────────────────────────────
+interface MentionDropdownProps {
+  query: string;
+  profileMap: Map<string, UserProfile>;
+  onSelect: (username: string) => void;
+}
+
+function MentionDropdown({
+  query,
+  profileMap,
+  onSelect,
+}: MentionDropdownProps) {
+  const candidates = Array.from(profileMap.values())
+    .filter(
+      (p) => p.username?.toLowerCase().startsWith(query.toLowerCase()) ?? false,
+    )
+    .slice(0, 5);
+
+  if (candidates.length === 0) return null;
+
+  return (
+    <div
+      className="absolute bottom-full left-3 right-3 mb-1 rounded-xl overflow-hidden shadow-xl z-40"
+      style={{
+        backgroundColor: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        boxShadow: "0 -8px 24px rgba(0,0,0,0.5)",
+      }}
+      data-ocid="thread.mention_dropdown"
+    >
+      {candidates.map((profile) => {
+        const avatarSrc =
+          profile.avatarUrl ?? generatePixelAvatar(profile.sessionId, 24);
+        return (
+          <button
+            type="button"
+            key={profile.sessionId}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-white/5"
+            onClick={() => onSelect(profile.username)}
+            data-ocid="thread.mention_dropdown_item"
+          >
+            <img
+              src={avatarSrc}
+              alt={profile.username}
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                objectFit: "cover",
+                flexShrink: 0,
+              }}
+            />
+            <span className="font-mono text-xs" style={{ color: "#e0e0e0" }}>
+              @{profile.username}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Main page
 // ──────────────────────────────────────────────
 export default function ThreadPage() {
   const { id } = useParams({ strict: false }) as { id?: string };
   const navigate = useNavigate();
-  // Thread ID from URL is a string — convert to bigint
   const threadIdBig = BigInt(id ?? "0");
   const threadIdNum = Number(threadIdBig);
+  const threadIdStr = String(threadIdBig);
 
   const [thread, setThread] = useState<Thread | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [profileMap, setProfileMap] = useState<Map<string, UserProfile>>(
+    new Map(),
+  );
   const [content, setContent] = useState("");
   const [inlineMediaUrl, setInlineMediaUrl] = useState("");
   const [inlineMediaType, setInlineMediaType] = useState<MediaType>("text");
@@ -759,6 +1175,16 @@ export default function ThreadPage() {
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Reply state
+  const [replyToPost, setReplyToPost] = useState<Post | null>(null);
+  const [replyMap, setReplyMap] = useState<Record<string, string>>({});
+
+  // Reactions version (trigger re-render of reaction rows)
+  const [reactionVersion, setReactionVersion] = useState(0);
+
+  // Mention autocomplete
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
   const sessionId = getSessionId();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -766,16 +1192,18 @@ export default function ThreadPage() {
   const prevPostCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const loadData = useCallback(async () => {
-    const [t, newPosts, cats] = await Promise.all([
+    const [t, newPosts, cats, profiles] = await Promise.all([
       backendApi.getThread(threadIdBig),
       backendApi.getPostsByThread(threadIdBig),
       backendApi.getCategories(),
+      backendApi.getAllProfiles(),
     ]);
 
     if (t === null) {
@@ -785,7 +1213,23 @@ export default function ThreadPage() {
     }
     setPosts(newPosts);
     setCategories(cats);
+
+    const map = new Map<string, UserProfile>();
+    for (const p of profiles) {
+      map.set(p.sessionId, p);
+    }
+    setProfileMap(map);
   }, [threadIdBig]);
+
+  // Load reply map from localStorage
+  useEffect(() => {
+    setReplyMap(getReplyMap());
+  }, []);
+
+  // Record thread visit for mention badge tracking
+  useEffect(() => {
+    recordThreadVisit(threadIdStr);
+  }, [threadIdStr]);
 
   // Auto-scroll when new posts arrive
   useEffect(() => {
@@ -818,6 +1262,10 @@ export default function ThreadPage() {
     return () => clearTimeout(timer);
   }, [scrollToBottom]);
 
+  // My username for mention highlights
+  const myProfile = profileMap.get(sessionId);
+  const myUsername = myProfile?.username;
+
   function readFileAsBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -843,11 +1291,9 @@ export default function ThreadPage() {
   function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) handleImageFile(file);
-    // Reset so same file can be selected again
     e.target.value = "";
   }
 
-  // Drag and drop handlers
   function handleDragEnter(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -888,6 +1334,8 @@ export default function ThreadPage() {
 
   function handleContentChange(val: string) {
     setContent(val);
+
+    // Detect media URL
     const found = extractFirstUrl(val);
     if (found) {
       setInlineMediaUrl(found);
@@ -895,6 +1343,46 @@ export default function ThreadPage() {
     } else {
       setInlineMediaUrl("");
       setInlineMediaType("text");
+    }
+
+    // Detect @mention being typed (from cursor)
+    const input = inputRef.current;
+    const cursor = input?.selectionStart ?? val.length;
+    const textToCursor = val.slice(0, cursor);
+    const mentionMatch = textToCursor.match(/@(\w*)$/);
+    if (mentionMatch) {
+      setMentionQuery(mentionMatch[1]);
+    } else {
+      setMentionQuery(null);
+    }
+  }
+
+  function handleMentionSelect(username: string) {
+    const input = inputRef.current;
+    const cursor = input?.selectionStart ?? content.length;
+    const before = content.slice(0, cursor);
+    const after = content.slice(cursor);
+    // Replace @partial with @username + space
+    const newBefore = before.replace(/@\w*$/, `@${username} `);
+    const newContent = newBefore + after;
+    setContent(newContent);
+    setMentionQuery(null);
+    // Re-focus and move cursor after inserted text
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(newBefore.length, newBefore.length);
+    });
+  }
+
+  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape" && mentionQuery !== null) {
+      e.preventDefault();
+      setMentionQuery(null);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && mentionQuery === null) {
+      e.preventDefault();
+      handleSubmit();
     }
   }
 
@@ -907,7 +1395,6 @@ export default function ThreadPage() {
       return;
     }
 
-    // Check ban status via backend
     const banned = await backendApi.isBanned(sessionId);
     if (banned) {
       toast.error("You are banned from posting.");
@@ -927,29 +1414,33 @@ export default function ThreadPage() {
         finalMediaType = inlineMediaType;
       }
 
-      await backendApi.createPost(
+      const newPost = await backendApi.createPost(
         threadIdBig,
         sessionId,
         content.trim(),
         finalMediaUrl,
         finalMediaType,
       );
+
+      // Store reply mapping if replying
+      if (replyToPost && newPost) {
+        const newPostId = String(newPost.id);
+        const replyToPostId = String(replyToPost.id);
+        storeReply(newPostId, replyToPostId);
+        setReplyMap((prev) => ({ ...prev, [newPostId]: replyToPostId }));
+      }
+
       setContent("");
       setUploadedImage(null);
       setInlineMediaUrl("");
       setInlineMediaType("text");
+      setReplyToPost(null);
+      setMentionQuery(null);
       await loadData();
     } catch {
       toast.error("Failed to send message");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
     }
   }
 
@@ -992,7 +1483,6 @@ export default function ThreadPage() {
   const live = isThreadLive(threadIdNum);
 
   return (
-    /* Full-height chatroom — main element is flex-1 overflow-hidden */
     <div
       className="flex flex-col flex-1 min-h-0"
       style={{ backgroundColor: "#0d0d0d" }}
@@ -1006,7 +1496,6 @@ export default function ThreadPage() {
         }}
       >
         <div className="max-w-3xl mx-auto flex items-center gap-3 px-3 py-2.5">
-          {/* Back */}
           <button
             type="button"
             onClick={() => navigate({ to: "/" })}
@@ -1018,7 +1507,6 @@ export default function ThreadPage() {
             <ArrowLeft size={16} />
           </button>
 
-          {/* Thread info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1
@@ -1064,7 +1552,6 @@ export default function ThreadPage() {
             </div>
           </div>
 
-          {/* Live indicator + post count */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span
               className={live ? "animate-pulse" : ""}
@@ -1093,7 +1580,7 @@ export default function ThreadPage() {
         </div>
       </div>
 
-      {/* ── Scrollable message list (with drag-and-drop) ──────────────────────── */}
+      {/* ── Scrollable message list ──────────────────────── */}
       <div
         className="flex-1 overflow-y-auto pt-4 relative"
         style={{
@@ -1105,7 +1592,6 @@ export default function ThreadPage() {
         onDrop={thread.isClosed ? undefined : handleDrop}
         data-ocid="thread.upload_dropzone"
       >
-        {/* Drag overlay */}
         {isDragging && (
           <div
             className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
@@ -1145,11 +1631,23 @@ export default function ThreadPage() {
           ) : (
             <>
               {posts.map((post, i) => (
-                <ChatBubble key={String(post.id)} post={post} index={i + 1} />
+                <ChatBubble
+                  key={String(post.id)}
+                  post={post}
+                  index={i + 1}
+                  profileMap={profileMap}
+                  threadId={threadIdStr}
+                  sessionId={sessionId}
+                  myUsername={myUsername}
+                  replyMap={replyMap}
+                  posts={posts}
+                  onReply={setReplyToPost}
+                  reactionVersion={reactionVersion}
+                  onReactionChange={() => setReactionVersion((v) => v + 1)}
+                />
               ))}
             </>
           )}
-          {/* Scroll anchor */}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -1180,7 +1678,25 @@ export default function ThreadPage() {
           }}
           data-ocid="thread.compose_bar"
         >
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-3xl mx-auto relative">
+            {/* @Mention dropdown (above compose bar) */}
+            {mentionQuery !== null && (
+              <MentionDropdown
+                query={mentionQuery}
+                profileMap={profileMap}
+                onSelect={handleMentionSelect}
+              />
+            )}
+
+            {/* Reply preview */}
+            {replyToPost && (
+              <ReplyPreviewBar
+                post={replyToPost}
+                profileMap={profileMap}
+                onCancel={() => setReplyToPost(null)}
+              />
+            )}
+
             {/* Staged image preview */}
             {uploadedImage && (
               <div className="flex items-start gap-2 px-3 pt-2.5 pb-1">
@@ -1215,7 +1731,7 @@ export default function ThreadPage() {
               </div>
             )}
 
-            {/* Inline media preview (auto-detected URL from message text) */}
+            {/* Inline media preview (auto-detected URL) */}
             {inlineMediaUrl && inlineMediaType !== "text" && (
               <InlineMediaPreview
                 url={inlineMediaUrl}
@@ -1244,7 +1760,6 @@ export default function ThreadPage() {
                 <ImagePlus size={16} />
               </button>
 
-              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1255,10 +1770,11 @@ export default function ThreadPage() {
 
               {/* Text input */}
               <Input
-                placeholder="Message…"
+                ref={inputRef}
+                placeholder={replyToPost ? "Write a reply…" : "Message…"}
                 value={content}
                 onChange={(e) => handleContentChange(e.target.value)}
-                onKeyDown={handleKeyDown}
+                onKeyDown={handleInputKeyDown}
                 className="flex-1 h-10 border-0 focus-visible:ring-1 text-sm"
                 style={{
                   backgroundColor: "#1e1e1e",

@@ -6,7 +6,7 @@ import type { backendInterface } from "./backend";
 import { createActorWithConfig } from "./config";
 
 // ─── Types re-exported ────────────────────────────────────────
-export type { Ban, Category, Post, Thread } from "./backend";
+export type { Ban, Category, Post, Thread, UserProfile } from "./backend";
 
 // ─── Lazy actor singleton ─────────────────────────────────────
 let _actor: backendInterface | null = null;
@@ -173,10 +173,18 @@ export async function getThread(id: bigint) {
 export async function createThread(
   title: string,
   categoryId: bigint,
-  creatorDisplayId: string,
+  creatorSessionId: string,
+  thumbnailUrl: string | null,
+  thumbnailType: string,
 ) {
   const actor = await getActor();
-  return actor.createThread(title, categoryId, creatorDisplayId);
+  return actor.createThread(
+    title,
+    categoryId,
+    creatorSessionId,
+    thumbnailUrl,
+    thumbnailType,
+  );
 }
 
 export async function updateThread(
@@ -213,7 +221,7 @@ export async function getAllPosts() {
 
 export async function createPost(
   threadId: bigint,
-  authorDisplayId: string,
+  authorSessionId: string,
   content: string,
   mediaUrl: string | null,
   mediaType: string,
@@ -221,7 +229,7 @@ export async function createPost(
   const actor = await getActor();
   return actor.createPost(
     threadId,
-    authorDisplayId,
+    authorSessionId,
     content,
     mediaUrl,
     mediaType,
@@ -243,24 +251,67 @@ export async function getBans() {
   }
 }
 
-export async function banUser(displayId: string, reason: string) {
+export async function banUser(sessionId: string, reason: string) {
   const actor = await getActor();
-  return actor.banUser(displayId, reason);
+  return actor.banUser(sessionId, reason);
 }
 
-export async function unbanUser(displayId: string): Promise<boolean> {
+export async function unbanUser(sessionId: string): Promise<boolean> {
   try {
     const actor = await getActor();
-    return await actor.unbanUser(displayId);
+    return await actor.unbanUser(sessionId);
   } catch {
     return false;
   }
 }
 
-export async function isBanned(displayId: string): Promise<boolean> {
+export async function isBanned(sessionId: string): Promise<boolean> {
   try {
     const actor = await getActor();
-    return await actor.isBanned(displayId);
+    return await actor.isBanned(sessionId);
+  } catch {
+    return false;
+  }
+}
+
+// ─── User Profiles ────────────────────────────────────────────
+export async function registerUser(sessionId: string, username: string) {
+  const actor = await getActor();
+  return actor.registerUser(sessionId, username);
+}
+
+export async function updateUsername(sessionId: string, newUsername: string) {
+  const actor = await getActor();
+  return actor.updateUsername(sessionId, newUsername);
+}
+
+export async function setAvatar(sessionId: string, avatarUrl: string | null) {
+  const actor = await getActor();
+  return actor.setAvatar(sessionId, avatarUrl);
+}
+
+export async function getProfile(sessionId: string) {
+  try {
+    const actor = await getActor();
+    return await actor.getProfile(sessionId);
+  } catch {
+    return null;
+  }
+}
+
+export async function getAllProfiles() {
+  try {
+    const actor = await getActor();
+    return await actor.getAllProfiles();
+  } catch {
+    return [];
+  }
+}
+
+export async function isUsernameTaken(username: string): Promise<boolean> {
+  try {
+    const actor = await getActor();
+    return await actor.isUsernameTaken(username);
   } catch {
     return false;
   }

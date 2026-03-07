@@ -320,7 +320,7 @@ function PostsTab() {
                   className="font-mono text-xs"
                   style={{ color: "#e0e0e0" }}
                 >
-                  {post.authorDisplayId}
+                  {post.authorSessionId}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
@@ -478,7 +478,7 @@ function BansTab() {
           <TableBody>
             {bans.map((ban, i) => (
               <TableRow
-                key={ban.displayId}
+                key={ban.sessionId}
                 style={{ borderColor: "#1a1a1a" }}
                 data-ocid={`admin.ban.row.${i + 1}`}
               >
@@ -486,7 +486,7 @@ function BansTab() {
                   className="font-mono text-xs"
                   style={{ color: "#e0e0e0" }}
                 >
-                  {ban.displayId}
+                  {ban.sessionId}
                 </TableCell>
                 <TableCell className="text-sm" style={{ color: "#aaa" }}>
                   {ban.reason}
@@ -503,8 +503,8 @@ function BansTab() {
                     className="font-mono text-xs px-2 py-1 rounded"
                     style={{ border: "1px solid #4a9e5c44", color: "#4a9e5c" }}
                     onClick={async () => {
-                      await backendApi.unbanUser(ban.displayId);
-                      toast.success(`${ban.displayId} unbanned`);
+                      await backendApi.unbanUser(ban.sessionId);
+                      toast.success(`${ban.sessionId} unbanned`);
                       refresh();
                     }}
                     data-ocid="admin.ban.secondary_button"

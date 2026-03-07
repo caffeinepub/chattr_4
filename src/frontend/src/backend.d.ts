@@ -9,7 +9,7 @@ export interface None {
 export type Option<T> = Some<T> | None;
 export interface Ban {
     timestamp: bigint;
-    displayId: string;
+    sessionId: string;
     reason: string;
 }
 export interface Thread {
@@ -17,11 +17,13 @@ export interface Thread {
     categoryId: bigint;
     postCount: bigint;
     title: string;
+    thumbnailUrl?: string;
+    creatorSessionId: string;
     lastActivity: bigint;
     createdAt: bigint;
-    creatorDisplayId: string;
     isClosed: boolean;
     isArchived: boolean;
+    thumbnailType: string;
 }
 export interface Post {
     id: bigint;
@@ -29,9 +31,14 @@ export interface Post {
     content: string;
     createdAt: bigint;
     mediaUrl?: string;
-    authorDisplayId: string;
+    authorSessionId: string;
     mediaType: string;
     threadId: bigint;
+}
+export interface UserProfile {
+    username: string;
+    avatarUrl?: string;
+    sessionId: string;
 }
 export interface Category {
     id: bigint;
@@ -39,23 +46,47 @@ export interface Category {
 }
 export interface backendInterface {
     addCategory(name: string): Promise<Category>;
-    banUser(displayId: string, reason: string): Promise<Ban>;
-    createPost(threadId: bigint, authorDisplayId: string, content: string, mediaUrl: string | null, mediaType: string): Promise<Post>;
-    createThread(title: string, categoryId: bigint, creatorDisplayId: string): Promise<Thread>;
+    banUser(sessionId: string, reason: string): Promise<Ban>;
+    createPost(threadId: bigint, authorSessionId: string, content: string, mediaUrl: string | null, mediaType: string): Promise<Post>;
+    createThread(title: string, categoryId: bigint, creatorSessionId: string, thumbnailUrl: string | null, thumbnailType: string): Promise<Thread>;
     deleteCategory(id: bigint): Promise<boolean>;
     deletePost(id: bigint): Promise<Post>;
     getAllPosts(): Promise<Array<Post>>;
+    getAllProfiles(): Promise<Array<UserProfile>>;
     getAllThreads(): Promise<Array<Thread>>;
     getArchivedThreads(): Promise<Array<Thread>>;
     getBans(): Promise<Array<Ban>>;
     getCategories(): Promise<Array<Category>>;
     getPostsByThread(threadId: bigint): Promise<Array<Post>>;
+    getProfile(sessionId: string): Promise<UserProfile | null>;
     getThread(id: bigint): Promise<Thread | null>;
     getThreads(): Promise<Array<Thread>>;
     initialize(): Promise<void>;
-    isBanned(displayId: string): Promise<boolean>;
+    isBanned(sessionId: string): Promise<boolean>;
+    isUsernameTaken(username: string): Promise<boolean>;
     logAction(_action: string): Promise<void>;
+    registerUser(sessionId: string, username: string): Promise<{
+        __kind__: "ok";
+        ok: UserProfile;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    setAvatar(sessionId: string, avatarUrl: string | null): Promise<{
+        __kind__: "ok";
+        ok: UserProfile;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     start(): Promise<void>;
-    unbanUser(displayId: string): Promise<boolean>;
+    unbanUser(sessionId: string): Promise<boolean>;
     updateThread(id: bigint, isClosed: boolean, isArchived: boolean): Promise<boolean>;
+    updateUsername(sessionId: string, newUsername: string): Promise<{
+        __kind__: "ok";
+        ok: UserProfile;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
 }

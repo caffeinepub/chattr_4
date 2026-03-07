@@ -1,12 +1,13 @@
 import Map "mo:core/Map";
-import Array "mo:core/Array";
-import Nat "mo:core/Nat";
-import Iter "mo:core/Iter";
-import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import List "mo:core/List";
+import Nat "mo:core/Nat";
+import Array "mo:core/Array";
+import Iter "mo:core/Iter";
 import MixinStorage "blob-storage/Mixin";
-import Storage "blob-storage/Storage";
+
+import Runtime "mo:core/Runtime";
+
 
 actor {
   include MixinStorage();
@@ -21,18 +22,20 @@ actor {
     id : Nat;
     title : Text;
     categoryId : Nat;
-    creatorDisplayId : Text;
+    creatorSessionId : Text;
     createdAt : Int;
     lastActivity : Int;
     isArchived : Bool;
     isClosed : Bool;
     postCount : Nat;
+    thumbnailUrl : ?Text;
+    thumbnailType : Text;
   };
 
   type Post = {
     id : Nat;
     threadId : Nat;
-    authorDisplayId : Text;
+    authorSessionId : Text;
     content : Text;
     mediaUrl : ?Text;
     mediaType : Text; // "text", "image", "video", etc.
@@ -41,9 +44,15 @@ actor {
   };
 
   public type Ban = {
-    displayId : Text;
+    sessionId : Text;
     reason : Text;
     timestamp : Int;
+  };
+
+  public type UserProfile = {
+    sessionId : Text;
+    username : Text;
+    avatarUrl : ?Text;
   };
 
   var nextThreadId = 1;
@@ -51,18 +60,21 @@ actor {
   var nextCategoryId = 1;
   var seeded = false;
 
-  // Anonymous imageboard/chatroom app Chattr
+  // Maps
   var categories = Map.empty<Nat, Category>();
   var threads = Map.empty<Nat, Thread>();
   var posts = Map.empty<Nat, Post>();
   var bans = Map.empty<Text, Ban>();
+  var userProfiles = Map.empty<Text, UserProfile>();
 
   // Categories
   public shared ({ caller }) func addCategory(name : Text) : async Category {
-    let id = nextCategoryId;
+    let category : Category = {
+      id = nextCategoryId;
+      name;
+    };
+    categories.add(nextCategoryId, category);
     nextCategoryId += 1;
-    let category : Category = { id; name };
-    categories.add(id, category);
     category;
   };
 
@@ -80,21 +92,28 @@ actor {
   };
 
   // Threads
-  public shared ({ caller }) func createThread(title : Text, categoryId : Nat, creatorDisplayId : Text) : async Thread {
-    let id = nextThreadId;
-    nextThreadId += 1;
+  public shared ({ caller }) func createThread(
+    title : Text,
+    categoryId : Nat,
+    creatorSessionId : Text,
+    thumbnailUrl : ?Text,
+    thumbnailType : Text,
+  ) : async Thread {
     let thread : Thread = {
-      id;
+      id = nextThreadId;
       title;
       categoryId;
-      creatorDisplayId;
+      creatorSessionId;
       createdAt = Time.now();
       lastActivity = Time.now();
       isArchived = false;
       isClosed = false;
       postCount = 0;
+      thumbnailUrl;
+      thumbnailType;
     };
-    threads.add(id, thread);
+    threads.add(nextThreadId, thread);
+    nextThreadId += 1;
     thread;
   };
 
@@ -127,7 +146,7 @@ actor {
   // Posts
   public shared ({ caller }) func createPost(
     threadId : Nat,
-    authorDisplayId : Text,
+    authorSessionId : Text,
     content : Text,
     mediaUrl : ?Text,
     mediaType : Text,
@@ -135,25 +154,22 @@ actor {
     switch (threads.get(threadId)) {
       case (null) { Runtime.trap("Thread not found") };
       case (?thread) {
-        if (bans.containsKey(authorDisplayId)) {
+        if (bans.containsKey(authorSessionId)) {
           Runtime.trap("User is banned");
         };
 
-        let id = nextPostId;
-        nextPostId += 1;
-
         let post : Post = {
-          id;
+          id = nextPostId;
           threadId;
-          authorDisplayId;
+          authorSessionId;
           content;
           mediaUrl;
           mediaType;
           createdAt = Time.now();
           isDeleted = false;
         };
-
-        posts.add(id, post);
+        posts.add(nextPostId, post);
+        nextPostId += 1;
 
         // Update thread post count and last activity
         let updatedThread : Thread = {
@@ -213,19 +229,19 @@ actor {
   };
 
   // Bans
-  public shared ({ caller }) func banUser(displayId : Text, reason : Text) : async Ban {
+  public shared ({ caller }) func banUser(sessionId : Text, reason : Text) : async Ban {
     let ban : Ban = {
-      displayId;
+      sessionId;
       reason;
       timestamp = Time.now();
     };
-    bans.add(displayId, ban);
+    bans.add(sessionId, ban);
     ban;
   };
 
-  public shared ({ caller }) func unbanUser(displayId : Text) : async Bool {
-    if (bans.containsKey(displayId)) {
-      bans.remove(displayId);
+  public shared ({ caller }) func unbanUser(sessionId : Text) : async Bool {
+    if (bans.containsKey(sessionId)) {
+      bans.remove(sessionId);
       true;
     } else {
       false;
@@ -236,8 +252,8 @@ actor {
     bans.values().toArray();
   };
 
-  public query ({ caller }) func isBanned(displayId : Text) : async Bool {
-    bans.containsKey(displayId);
+  public query ({ caller }) func isBanned(sessionId : Text) : async Bool {
+    bans.containsKey(sessionId);
   };
 
   // Seed default categories on first init
@@ -256,5 +272,84 @@ actor {
   public shared ({ caller }) func start() : async () {
     await initialize();
   };
-};
 
+  // User Profiles
+  public shared ({ caller }) func registerUser(sessionId : Text, username : Text) : async {
+    #ok : UserProfile;
+    #err : Text;
+  } {
+    if (username.size() > 20) {
+      return #err("Username exceeds maximum length of 20 characters");
+    };
+
+    if (isUsernameTakenInternal(username)) {
+      return #err("Username is already taken");
+    };
+
+    let profile : UserProfile = {
+      sessionId;
+      username;
+      avatarUrl = null;
+    };
+    userProfiles.add(sessionId, profile);
+    #ok(profile);
+  };
+
+  public shared ({ caller }) func updateUsername(sessionId : Text, newUsername : Text) : async {
+    #ok : UserProfile;
+    #err : Text;
+  } {
+    if (newUsername.size() > 20) {
+      return #err("Username exceeds maximum length of 20 characters");
+    };
+
+    if (isUsernameTakenInternal(newUsername)) {
+      return #err("Username is already taken");
+    };
+
+    switch (userProfiles.get(sessionId)) {
+      case (null) { #err("User not found") };
+      case (?profile) {
+        let updatedProfile : UserProfile = {
+          profile with username = newUsername
+        };
+        userProfiles.add(sessionId, updatedProfile);
+        #ok(updatedProfile);
+      };
+    };
+  };
+
+  public shared ({ caller }) func setAvatar(sessionId : Text, avatarUrl : ?Text) : async {
+    #ok : UserProfile;
+    #err : Text;
+  } {
+    switch (userProfiles.get(sessionId)) {
+      case (null) { #err("User not found") };
+      case (?profile) {
+        let updatedProfile : UserProfile = {
+          profile with avatarUrl
+        };
+        userProfiles.add(sessionId, updatedProfile);
+        #ok(updatedProfile);
+      };
+    };
+  };
+
+  public query ({ caller }) func getProfile(sessionId : Text) : async ?UserProfile {
+    userProfiles.get(sessionId);
+  };
+
+  public query ({ caller }) func getAllProfiles() : async [UserProfile] {
+    userProfiles.values().toArray();
+  };
+
+  public query ({ caller }) func isUsernameTaken(username : Text) : async Bool {
+    isUsernameTakenInternal(username);
+  };
+
+  func isUsernameTakenInternal(username : Text) : Bool {
+    userProfiles.values().toArray().any(
+      func(profile) { profile.username == username }
+    );
+  };
+};
