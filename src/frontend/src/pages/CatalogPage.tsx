@@ -614,8 +614,9 @@ function YouTubeThumbnailCard({ url }: { url: string }) {
   );
 }
 
-// ─── Twitch thumbnail card (CDN thumbnail + oEmbed title) ──────────
-// Thumbnail from Twitch CDN. Stream title from oEmbed API (no API key needed).
+// ─── Twitch thumbnail card (CDN thumbnail + LinkMeta metadata) ──────────
+// Thumbnail from Twitch CDN. Title/description/siteName from LinkMeta.
+// If LinkMeta fails, show the image with no overlay text.
 function TwitchThumbnailCard({ url }: { url: string }) {
   const { thumbUrl, channel } = (() => {
     if (/twitch\.tv\/videos\//i.test(url))
@@ -631,21 +632,21 @@ function TwitchThumbnailCard({ url }: { url: string }) {
     };
   })();
 
-  const [streamTitle, setStreamTitle] = useState<string | null>(null);
+  const [linkMeta, setLinkMeta] = useState<LinkMetaData | null>(null);
+  const [metaLoaded, setMetaLoaded] = useState(false);
 
   useEffect(() => {
     if (!channel) return;
-    // Use Twitch oEmbed to get the stream title
-    fetch(
-      `https://api.twitch.tv/v5/oembed?url=https://www.twitch.tv/${channel}`,
-    )
-      .then((r) => r.json())
+    fetchLinkMeta(`https://www.twitch.tv/${channel}`)
       .then((data) => {
-        if (data?.title) setStreamTitle(data.title);
+        setLinkMeta(
+          data && (data.title || data.description || data.siteName)
+            ? data
+            : null,
+        );
       })
-      .catch(() => {
-        /* fallback to default title */
-      });
+      .catch(() => setLinkMeta(null))
+      .finally(() => setMetaLoaded(true));
   }, [channel]);
 
   // Fallback badge shown when no channel/thumb available
@@ -681,13 +682,19 @@ function TwitchThumbnailCard({ url }: { url: string }) {
 
   if (!thumbUrl || !channel) return fallbackBadge;
 
+  // If meta not yet loaded, render card without overlay (avoids flash)
+  // Once loaded: if LinkMeta returned something, show overlay; otherwise image only (no overlay)
   return (
     <OverlayThumbnailCard
       image={thumbUrl}
       hostname="twitch.tv"
-      siteName="Twitch"
-      title={streamTitle ?? `Watch ${channel} on Twitch`}
-      description={streamTitle ? channel : undefined}
+      siteName={
+        metaLoaded && linkMeta ? (linkMeta.siteName ?? "Twitch") : undefined
+      }
+      title={metaLoaded && linkMeta ? (linkMeta.title ?? undefined) : undefined}
+      description={
+        metaLoaded && linkMeta ? (linkMeta.description ?? channel) : undefined
+      }
       fallback={fallbackBadge}
       isVideoSite={true}
     />

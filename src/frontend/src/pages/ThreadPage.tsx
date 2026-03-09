@@ -16,12 +16,14 @@ import {
   Copy,
   CornerUpLeft,
   ExternalLink,
+  Eye,
   Film,
   Flag,
   Image,
   ImagePlus,
   Link2,
   Lock,
+  MessageSquare,
   SendHorizontal,
   SmilePlus,
   Trash2,
@@ -1318,13 +1320,15 @@ function CollapsibleMedia({
   mediaType,
   index,
   isOwn,
+  initiallyExpanded,
 }: {
   url: string;
   mediaType: MediaType;
   index: number;
   isOwn: boolean;
+  initiallyExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded ?? false);
 
   return (
     <div className="mt-2">
@@ -1977,6 +1981,8 @@ interface ChatBubbleProps {
     e: React.MouseEvent | { clientX: number; clientY: number },
     post: Post,
   ) => void;
+  /** If true, media embeds start expanded by default */
+  isInitialPost?: boolean;
 }
 
 function ChatBubble({
@@ -1993,6 +1999,7 @@ function ChatBubble({
   myReactionIndex,
   onReactionChange,
   onContextMenu,
+  isInitialPost,
 }: ChatBubbleProps) {
   const isOwn = post.authorSessionId === sessionId;
   const authorProfile = profileMap.get(post.authorSessionId);
@@ -2389,6 +2396,7 @@ function ChatBubble({
               mediaType={mediaType}
               index={index}
               isOwn={isOwn}
+              initiallyExpanded={isInitialPost}
             />
           )}
 
@@ -3574,7 +3582,7 @@ export default function ThreadPage() {
               )}
             </div>
 
-            {/* ── Row 3: creator username + timestamp + bookmark/report (right) ── */}
+            {/* ── Row 3: creator username + timestamp + counts + bookmark/report (right) ── */}
             <div className="flex items-center gap-2 mt-0.5">
               <span
                 className="font-mono"
@@ -3588,6 +3596,28 @@ export default function ThreadPage() {
               >
                 {timeAgo(createdAtMs)}
               </span>
+              {/* Post count */}
+              {Number(thread.postCount) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+                  style={{ color: "#444" }}
+                  title={`${Number(thread.postCount)} posts`}
+                >
+                  <MessageSquare size={11} />
+                  {Number(thread.postCount)}
+                </span>
+              )}
+              {/* View count */}
+              {Number(thread.viewCount) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+                  style={{ color: "#444" }}
+                  title={`${Number(thread.viewCount)} views`}
+                >
+                  <Eye size={11} />
+                  {Number(thread.viewCount)}
+                </span>
+              )}
               <div className="flex items-center gap-0.5 ml-auto">
                 <button
                   type="button"
@@ -3692,6 +3722,7 @@ export default function ThreadPage() {
                     setTimeout(() => loadData(), 300);
                   }}
                   onContextMenu={handleBubbleContextMenu}
+                  isInitialPost={i === 0}
                 />
               ))}
             </>
