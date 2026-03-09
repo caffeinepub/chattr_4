@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
-import { Bookmark, Eye, Flag, MessageSquare } from "lucide-react";
+import { Bookmark, Eye, Flag, MessageSquare, Share2 } from "lucide-react";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -115,6 +115,7 @@ interface ThreadCardProps {
   onClick: () => void;
   onBookmark: (threadId: bigint) => void;
   onReport: (threadId: bigint) => void;
+  onShare: (threadId: bigint) => void;
   isBookmarked: boolean;
   isReported: boolean;
 }
@@ -1041,6 +1042,7 @@ function ThreadCard({
   onClick,
   onBookmark,
   onReport,
+  onShare,
   isBookmarked,
   isReported,
 }: ThreadCardProps) {
@@ -1199,6 +1201,20 @@ function ThreadCard({
               {Number(thread.viewCount)}
             </span>
           )}
+          {/* Share button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare(thread.id);
+            }}
+            className="p-1 rounded transition-colors hover:bg-white/5"
+            style={{ color: "#444" }}
+            data-ocid={`catalog.thread.share_button.${index}`}
+            aria-label="Share this chat"
+          >
+            <Share2 size={11} />
+          </button>
           <button
             type="button"
             onClick={(e) => {
@@ -1208,7 +1224,7 @@ function ThreadCard({
             className="p-1 rounded transition-colors hover:bg-white/5"
             style={{ color: isBookmarked ? "#f0c040" : "#444" }}
             data-ocid={`catalog.thread.bookmark_button.${index}`}
-            aria-label="Bookmark this chat"
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark this chat"}
           >
             <Bookmark size={11} fill={isBookmarked ? "#f0c040" : "none"} />
           </button>
@@ -1422,6 +1438,10 @@ export default function CatalogPage() {
   const [bookmarkedThreadIds, setBookmarkedThreadIds] = useState<Set<string>>(
     new Set(),
   );
+  // Map from thread id string to bookmark id (for removal/toggle)
+  const [bookmarkIdMap, setBookmarkIdMap] = useState<Map<string, bigint>>(
+    new Map(),
+  );
   const [reportedThreadIds, setReportedThreadIds] = useState<Set<string>>(
     new Set(),
   );
@@ -1467,6 +1487,41 @@ export default function CatalogPage() {
     setMentionCounts(counts);
   }, [sessionId]);
 
+  // Load persisted bookmark/report state once on mount
+  useEffect(() => {
+    async function loadPersistedState() {
+      try {
+        const [bookmarks, reports] = await Promise.all([
+          backendApi.getBookmarks(sessionId),
+          backendApi.getThreadReports(),
+        ]);
+        // Build bookmarked thread set and id map
+        const bSet = new Set<string>();
+        const bMap = new Map<string, bigint>();
+        for (const b of bookmarks) {
+          if (b.targetType === "thread") {
+            const tid = String(b.targetId);
+            bSet.add(tid);
+            bMap.set(tid, b.id);
+          }
+        }
+        setBookmarkedThreadIds(bSet);
+        setBookmarkIdMap(bMap);
+        // Build reported thread set (only reports by this session)
+        const rSet = new Set<string>();
+        for (const r of reports) {
+          if (r.reporterSessionId === sessionId) {
+            rSet.add(String(r.threadId));
+          }
+        }
+        setReportedThreadIds(rSet);
+      } catch {
+        // Non-fatal — state stays empty
+      }
+    }
+    loadPersistedState();
+  }, [sessionId]);
+
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5000);
@@ -1486,15 +1541,52 @@ export default function CatalogPage() {
     threads.some((t) => t.categoryId === cat.id),
   );
 
-  // Bookmark a thread
+  // Bookmark a thread (toggle)
   async function handleBookmarkThread(threadId: bigint) {
-    try {
-      await backendApi.addBookmark(sessionId, "thread", threadId);
-      setBookmarkedThreadIds((prev) => new Set([...prev, String(threadId)]));
-      toast.success("Chat bookmarked");
-    } catch {
-      toast.error("Failed to bookmark");
+    const tid = String(threadId);
+    const alreadyBookmarked = bookmarkedThreadIds.has(tid);
+    if (alreadyBookmarked) {
+      const bookmarkId = bookmarkIdMap.get(tid);
+      if (bookmarkId === undefined) return;
+      try {
+        await backendApi.removeBookmark(sessionId, bookmarkId);
+        setBookmarkedThreadIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tid);
+          return next;
+        });
+        setBookmarkIdMap((prev) => {
+          const next = new Map(prev);
+          next.delete(tid);
+          return next;
+        });
+        toast.success("Bookmark removed");
+      } catch {
+        toast.error("Failed to remove bookmark");
+      }
+    } else {
+      try {
+        const bookmark = await backendApi.addBookmark(
+          sessionId,
+          "thread",
+          threadId,
+        );
+        setBookmarkedThreadIds((prev) => new Set([...prev, tid]));
+        setBookmarkIdMap((prev) => new Map([...prev, [tid, bookmark.id]]));
+        toast.success("Chat bookmarked");
+      } catch {
+        toast.error("Failed to bookmark");
+      }
     }
+  }
+
+  // Share a thread — copy URL to clipboard
+  function handleShareThread(threadId: bigint) {
+    const url = `${window.location.origin}/thread/${threadId}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Link copied to clipboard"),
+      () => toast.error("Failed to copy link"),
+    );
   }
 
   // Open report modal for a thread
@@ -1831,6 +1923,7 @@ export default function CatalogPage() {
               }
               onBookmark={handleBookmarkThread}
               onReport={handleReportThread}
+              onShare={handleShareThread}
               isBookmarked={bookmarkedThreadIds.has(String(thread.id))}
               isReported={reportedThreadIds.has(String(thread.id))}
             />

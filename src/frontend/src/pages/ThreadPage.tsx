@@ -25,6 +25,7 @@ import {
   Lock,
   MessageSquare,
   SendHorizontal,
+  Share2,
   SmilePlus,
   Trash2,
   Tv2,
@@ -322,6 +323,13 @@ function ImageLightbox({
           maxHeight: "90vh",
           objectFit: "contain",
           borderRadius: 8,
+          // Re-enable native right-click / long-press save behavior.
+          // The parent bubble suppresses context menu and touch callout
+          // via inherited CSS — override those here so the OS save prompt works.
+          WebkitTouchCallout: "default",
+          WebkitUserSelect: "auto",
+          userSelect: "auto",
+          pointerEvents: "auto",
         }}
       />
     </div>
@@ -2204,7 +2212,7 @@ function ChatBubble({
               ? { bottom: "calc(100% + 6px)" }
               : { top: "calc(100% + 6px)" }),
             maxHeight: 240,
-            minWidth: 110,
+            minWidth: 48,
             ...(isOwn ? { right: 0 } : { left: 0 }),
           }}
         >
@@ -2248,7 +2256,7 @@ function ChatBubble({
                   }
                   onReactionChange();
                 }}
-                className="flex items-center gap-2 px-3 py-2 transition-all hover:bg-white/10 font-mono text-xs"
+                className="flex items-center justify-center px-3 py-2 transition-all hover:bg-white/10"
                 style={{
                   color: isActive ? "#6abd7c" : "#ccc",
                   backgroundColor: isActive ? "#4a9e5c10" : "transparent",
@@ -2256,9 +2264,6 @@ function ChatBubble({
                 title={REACTION_LABELS[emoji] ?? emoji}
               >
                 <span style={{ fontSize: 16, lineHeight: 1 }}>{emoji}</span>
-                <span style={{ color: isActive ? "#6abd7c" : "#888" }}>
-                  {REACTION_LABELS[emoji] ?? emoji}
-                </span>
               </button>
             );
           })}
@@ -2798,6 +2803,8 @@ export default function ThreadPage() {
   const [titleCollapsed, setTitleCollapsed] = useState(false);
   const [titleIsMultiLine, setTitleIsMultiLine] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
   // Visible posts (reaction posts filtered out)
   const [posts, setPosts] = useState<Post[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -2850,6 +2857,7 @@ export default function ThreadPage() {
   const [reportChatModalOpen, setReportChatModalOpen] = useState(false);
   // Thread bookmark / report filled state
   const [threadBookmarked, setThreadBookmarked] = useState(false);
+  const [threadBookmarkId, setThreadBookmarkId] = useState<bigint | null>(null);
   const [threadReported, setThreadReported] = useState(false);
 
   // Voice recording state
@@ -2968,6 +2976,37 @@ export default function ThreadPage() {
     }
   }, [threadIdBig, threadIdStr, sessionId]);
 
+  // Load persisted bookmark / report state for this thread on mount
+  useEffect(() => {
+    async function loadPersistedThreadState() {
+      try {
+        const [bookmarks, reports] = await Promise.all([
+          backendApi.getBookmarks(sessionId),
+          backendApi.getThreadReports(),
+        ]);
+        const myBookmark = bookmarks.find(
+          (b) =>
+            b.targetType === "thread" && String(b.targetId) === threadIdStr,
+        );
+        if (myBookmark) {
+          setThreadBookmarked(true);
+          setThreadBookmarkId(myBookmark.id);
+        }
+        const myReport = reports.find(
+          (r) =>
+            r.reporterSessionId === sessionId &&
+            String(r.threadId) === threadIdStr,
+        );
+        if (myReport) {
+          setThreadReported(true);
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+    loadPersistedThreadState();
+  }, [sessionId, threadIdStr]);
+
   // Detect whether the title wraps to more than one line
   // biome-ignore lint/correctness/useExhaustiveDependencies: titleCollapsed changes layout so we re-measure; intentional
   useEffect(() => {
@@ -3038,6 +3077,9 @@ export default function ThreadPage() {
     }
     // No saved position — scroll to bottom on first visit
     messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    // Reset header visibility on thread change
+    setHeaderVisible(true);
+    lastScrollYRef.current = 0;
   }, [thread, threadIdStr]);
 
   // Track scroll position for floating indicators
@@ -3067,6 +3109,20 @@ export default function ThreadPage() {
           String(container.scrollTop),
         );
       }, 300);
+
+      // Auto-hide header on mobile
+      const currentScrollY = container.scrollTop;
+      if (window.innerWidth < 768) {
+        if (
+          currentScrollY > lastScrollYRef.current + 4 &&
+          currentScrollY > 40
+        ) {
+          setHeaderVisible(false);
+        } else if (currentScrollY < lastScrollYRef.current - 4) {
+          setHeaderVisible(true);
+        }
+      }
+      lastScrollYRef.current = currentScrollY;
 
       // Check if mention post is now visible
       if (pendingMentionPostId) {
@@ -3286,13 +3342,37 @@ export default function ThreadPage() {
   }
 
   async function handleBookmarkThread() {
-    try {
-      await backendApi.addBookmark(sessionId, "thread", threadIdBig);
-      setThreadBookmarked(true);
-      toast.success("Chat bookmarked");
-    } catch {
-      toast.error("Failed to bookmark");
+    if (threadBookmarked && threadBookmarkId !== null) {
+      try {
+        await backendApi.removeBookmark(sessionId, threadBookmarkId);
+        setThreadBookmarked(false);
+        setThreadBookmarkId(null);
+        toast.success("Bookmark removed");
+      } catch {
+        toast.error("Failed to remove bookmark");
+      }
+    } else {
+      try {
+        const bookmark = await backendApi.addBookmark(
+          sessionId,
+          "thread",
+          threadIdBig,
+        );
+        setThreadBookmarked(true);
+        setThreadBookmarkId(bookmark.id);
+        toast.success("Chat bookmarked");
+      } catch {
+        toast.error("Failed to bookmark");
+      }
     }
+  }
+
+  function handleShareThread() {
+    const url = `${window.location.origin}/thread/${threadIdStr}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Link copied to clipboard"),
+      () => toast.error("Failed to copy link"),
+    );
   }
 
   async function handleVoiceMessage(audioDataUrl: string, _durationMs: number) {
@@ -3469,13 +3549,13 @@ export default function ThreadPage() {
     >
       {/* ── Compact thread header ──────────────────────── */}
       <div
-        className="shrink-0 border-b"
+        className={`shrink-0 border-b transition-transform duration-200 ${!headerVisible ? "-translate-y-full" : "translate-y-0"}`}
         style={{
           backgroundColor: "#111111",
           borderBottomColor: "#2a2a2a",
         }}
       >
-        <div className="max-w-3xl mx-auto flex items-center gap-3 px-3 py-2.5">
+        <div className="max-w-3xl mx-auto flex items-center gap-3 px-3 py-1.5 md:py-2">
           <button
             type="button"
             onClick={() => navigate({ to: "/" })}
@@ -3596,35 +3676,48 @@ export default function ThreadPage() {
               >
                 {timeAgo(createdAtMs)}
               </span>
-              {/* Post count */}
-              {Number(thread.postCount) > 0 && (
-                <span
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                  style={{ color: "#444" }}
-                  title={`${Number(thread.postCount)} posts`}
-                >
-                  <MessageSquare size={11} />
-                  {Number(thread.postCount)}
-                </span>
-              )}
-              {/* View count */}
-              {Number(thread.viewCount) > 0 && (
-                <span
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                  style={{ color: "#444" }}
-                  title={`${Number(thread.viewCount)} views`}
-                >
-                  <Eye size={11} />
-                  {Number(thread.viewCount)}
-                </span>
-              )}
               <div className="flex items-center gap-0.5 ml-auto">
+                {/* Post count */}
+                {Number(thread.postCount) > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+                    style={{ color: "#444" }}
+                    title={`${Number(thread.postCount)} posts`}
+                  >
+                    <MessageSquare size={11} />
+                    {Number(thread.postCount)}
+                  </span>
+                )}
+                {/* View count */}
+                {Number(thread.viewCount) > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+                    style={{ color: "#444" }}
+                    title={`${Number(thread.viewCount)} views`}
+                  >
+                    <Eye size={11} />
+                    {Number(thread.viewCount)}
+                  </span>
+                )}
+                {/* Share button */}
+                <button
+                  type="button"
+                  onClick={handleShareThread}
+                  className="p-1 rounded transition-colors hover:bg-white/5"
+                  style={{ color: "#444" }}
+                  aria-label="Share this chat"
+                  data-ocid="thread.share_button"
+                >
+                  <Share2 size={12} />
+                </button>
                 <button
                   type="button"
                   onClick={handleBookmarkThread}
                   className="p-1 rounded transition-colors hover:bg-white/5"
                   style={{ color: threadBookmarked ? "#f0c040" : "#444" }}
-                  aria-label="Bookmark this chat"
+                  aria-label={
+                    threadBookmarked ? "Remove bookmark" : "Bookmark this chat"
+                  }
                   data-ocid="thread.bookmark_button"
                 >
                   <Bookmark
