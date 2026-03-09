@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { syncCategoriesToCanonical } from "./backendApi";
 import type { UserProfile } from "./backendApi";
 import * as backendApi from "./backendApi";
+import LevelBadge from "./components/LevelBadge";
 import OnboardingModal from "./components/OnboardingModal";
 import SettingsModal from "./components/SettingsModal";
 import AdminPage from "./pages/AdminPage";
@@ -113,14 +114,17 @@ function Header({
               data-ocid="header.avatar"
             />
 
-            {/* Username */}
-            <span
-              className="font-mono text-xs hidden sm:block"
-              style={{ color: "#888" }}
-              data-ocid="header.username"
-            >
-              {profile?.username ?? sessionId}
-            </span>
+            {/* Username + Level Badge */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              <span
+                className="font-mono text-xs"
+                style={{ color: "#888" }}
+                data-ocid="header.username"
+              >
+                {profile?.username ?? sessionId}
+              </span>
+              {profile?.level && <LevelBadge level={profile.level} />}
+            </div>
 
             {/* Settings gear */}
             <button
@@ -167,6 +171,10 @@ function RootLayout() {
   useEffect(() => {
     if (isOnboarded()) {
       backendApi.getProfile(sessionId).then((p) => {
+        if (p) setProfile(p);
+      });
+      // Award daily activity points
+      backendApi.checkDailyActivity(sessionId).then((p) => {
         if (p) setProfile(p);
       });
     }

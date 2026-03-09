@@ -19,7 +19,23 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const Bookmark = IDL.Record({
+  'id' : IDL.Nat,
+  'createdAt' : IDL.Int,
+  'targetType' : IDL.Text,
+  'sessionId' : IDL.Text,
+  'targetId' : IDL.Nat,
+});
 export const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
+export const UserProfile = IDL.Record({
+  'daysActive' : IDL.Nat,
+  'username' : IDL.Text,
+  'lastActiveDate' : IDL.Int,
+  'level' : IDL.Text,
+  'avatarUrl' : IDL.Opt(IDL.Text),
+  'sessionId' : IDL.Text,
+  'points' : IDL.Nat,
+});
 export const Ban = IDL.Record({
   'timestamp' : IDL.Int,
   'sessionId' : IDL.Text,
@@ -47,18 +63,22 @@ export const Thread = IDL.Record({
   'categoryId' : IDL.Nat,
   'postCount' : IDL.Nat,
   'title' : IDL.Text,
+  'reportCount' : IDL.Nat,
   'thumbnailUrl' : IDL.Opt(IDL.Text),
   'creatorSessionId' : IDL.Text,
   'lastActivity' : IDL.Int,
   'createdAt' : IDL.Int,
   'isClosed' : IDL.Bool,
   'isArchived' : IDL.Bool,
+  'viewCount' : IDL.Nat,
   'thumbnailType' : IDL.Text,
 });
-export const UserProfile = IDL.Record({
-  'username' : IDL.Text,
-  'avatarUrl' : IDL.Opt(IDL.Text),
-  'sessionId' : IDL.Text,
+export const ThreadReport = IDL.Record({
+  'id' : IDL.Nat,
+  'reporterSessionId' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'threadId' : IDL.Nat,
+  'reason' : IDL.Text,
 });
 export const http_header = IDL.Record({
   'value' : IDL.Text,
@@ -106,8 +126,11 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  'addBookmark' : IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [Bookmark], []),
   'addCategory' : IDL.Func([IDL.Text], [Category], []),
+  'awardPoints' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Opt(UserProfile)], []),
   'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
+  'checkDailyActivity' : IDL.Func([IDL.Text], [UserProfile], []),
   'createPost' : IDL.Func(
       [
         IDL.Nat,
@@ -129,6 +152,7 @@ export const idlService = IDL.Service({
   'deletePost' : IDL.Func([IDL.Nat], [Post], []),
   'fetchOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
   'fetchRedditPostTitle' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+  'fetchRumbleOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
   'fetchRumbleThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
   'fetchTwitchThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
   'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
@@ -136,20 +160,26 @@ export const idlService = IDL.Service({
   'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
+  'getBookmarks' : IDL.Func([IDL.Text], [IDL.Vec(Bookmark)], ['query']),
   'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
   'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
   'getProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
+  'getSortedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
+  'getThreadReports' : IDL.Func([], [IDL.Vec(ThreadReport)], ['query']),
   'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
   'initialize' : IDL.Func([], [], []),
   'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isUsernameTaken' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'logAction' : IDL.Func([IDL.Text], [], []),
+  'recordView' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], []),
   'registerUser' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
       [],
     ),
+  'removeBookmark' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Bool], []),
+  'reportThread' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [ThreadReport], []),
   'setAvatar' : IDL.Func(
       [IDL.Text, IDL.Opt(IDL.Text)],
       [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
@@ -184,7 +214,23 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
+  const Bookmark = IDL.Record({
+    'id' : IDL.Nat,
+    'createdAt' : IDL.Int,
+    'targetType' : IDL.Text,
+    'sessionId' : IDL.Text,
+    'targetId' : IDL.Nat,
+  });
   const Category = IDL.Record({ 'id' : IDL.Nat, 'name' : IDL.Text });
+  const UserProfile = IDL.Record({
+    'daysActive' : IDL.Nat,
+    'username' : IDL.Text,
+    'lastActiveDate' : IDL.Int,
+    'level' : IDL.Text,
+    'avatarUrl' : IDL.Opt(IDL.Text),
+    'sessionId' : IDL.Text,
+    'points' : IDL.Nat,
+  });
   const Ban = IDL.Record({
     'timestamp' : IDL.Int,
     'sessionId' : IDL.Text,
@@ -212,18 +258,22 @@ export const idlFactory = ({ IDL }) => {
     'categoryId' : IDL.Nat,
     'postCount' : IDL.Nat,
     'title' : IDL.Text,
+    'reportCount' : IDL.Nat,
     'thumbnailUrl' : IDL.Opt(IDL.Text),
     'creatorSessionId' : IDL.Text,
     'lastActivity' : IDL.Int,
     'createdAt' : IDL.Int,
     'isClosed' : IDL.Bool,
     'isArchived' : IDL.Bool,
+    'viewCount' : IDL.Nat,
     'thumbnailType' : IDL.Text,
   });
-  const UserProfile = IDL.Record({
-    'username' : IDL.Text,
-    'avatarUrl' : IDL.Opt(IDL.Text),
-    'sessionId' : IDL.Text,
+  const ThreadReport = IDL.Record({
+    'id' : IDL.Nat,
+    'reporterSessionId' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'threadId' : IDL.Nat,
+    'reason' : IDL.Text,
   });
   const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
   const http_request_result = IDL.Record({
@@ -268,8 +318,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    'addBookmark' : IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [Bookmark], []),
     'addCategory' : IDL.Func([IDL.Text], [Category], []),
+    'awardPoints' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Opt(UserProfile)], []),
     'banUser' : IDL.Func([IDL.Text, IDL.Text], [Ban], []),
+    'checkDailyActivity' : IDL.Func([IDL.Text], [UserProfile], []),
     'createPost' : IDL.Func(
         [
           IDL.Nat,
@@ -291,6 +344,7 @@ export const idlFactory = ({ IDL }) => {
     'deletePost' : IDL.Func([IDL.Nat], [Post], []),
     'fetchOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
     'fetchRedditPostTitle' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
+    'fetchRumbleOgMetadata' : IDL.Func([IDL.Text], [OgMetadata], []),
     'fetchRumbleThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
     'fetchTwitchThumbnail' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], []),
     'getAllPosts' : IDL.Func([], [IDL.Vec(Post)], ['query']),
@@ -298,18 +352,28 @@ export const idlFactory = ({ IDL }) => {
     'getAllThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'getArchivedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'getBans' : IDL.Func([], [IDL.Vec(Ban)], ['query']),
+    'getBookmarks' : IDL.Func([IDL.Text], [IDL.Vec(Bookmark)], ['query']),
     'getCategories' : IDL.Func([], [IDL.Vec(Category)], ['query']),
     'getPostsByThread' : IDL.Func([IDL.Nat], [IDL.Vec(Post)], ['query']),
     'getProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
+    'getSortedThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'getThread' : IDL.Func([IDL.Nat], [IDL.Opt(Thread)], ['query']),
+    'getThreadReports' : IDL.Func([], [IDL.Vec(ThreadReport)], ['query']),
     'getThreads' : IDL.Func([], [IDL.Vec(Thread)], ['query']),
     'initialize' : IDL.Func([], [], []),
     'isBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isUsernameTaken' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'logAction' : IDL.Func([IDL.Text], [], []),
+    'recordView' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], []),
     'registerUser' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : UserProfile, 'err' : IDL.Text })],
+        [],
+      ),
+    'removeBookmark' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Bool], []),
+    'reportThread' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
+        [ThreadReport],
         [],
       ),
     'setAvatar' : IDL.Func(

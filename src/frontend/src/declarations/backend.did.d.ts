@@ -15,6 +15,13 @@ export interface Ban {
   'sessionId' : string,
   'reason' : string,
 }
+export interface Bookmark {
+  'id' : bigint,
+  'createdAt' : bigint,
+  'targetType' : string,
+  'sessionId' : string,
+  'targetId' : bigint,
+}
 export interface Category { 'id' : bigint, 'name' : string }
 export interface OgMetadata {
   'title' : [] | [string],
@@ -38,13 +45,22 @@ export interface Thread {
   'categoryId' : bigint,
   'postCount' : bigint,
   'title' : string,
+  'reportCount' : bigint,
   'thumbnailUrl' : [] | [string],
   'creatorSessionId' : string,
   'lastActivity' : bigint,
   'createdAt' : bigint,
   'isClosed' : boolean,
   'isArchived' : boolean,
+  'viewCount' : bigint,
   'thumbnailType' : string,
+}
+export interface ThreadReport {
+  'id' : bigint,
+  'reporterSessionId' : string,
+  'createdAt' : bigint,
+  'threadId' : bigint,
+  'reason' : string,
 }
 export interface TransformationInput {
   'context' : Uint8Array,
@@ -56,9 +72,13 @@ export interface TransformationOutput {
   'headers' : Array<http_header>,
 }
 export interface UserProfile {
+  'daysActive' : bigint,
   'username' : string,
+  'lastActiveDate' : bigint,
+  'level' : string,
   'avatarUrl' : [] | [string],
   'sessionId' : string,
+  'points' : bigint,
 }
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
@@ -93,8 +113,11 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  'addBookmark' : ActorMethod<[string, string, bigint], Bookmark>,
   'addCategory' : ActorMethod<[string], Category>,
+  'awardPoints' : ActorMethod<[string, bigint], [] | [UserProfile]>,
   'banUser' : ActorMethod<[string, string], Ban>,
+  'checkDailyActivity' : ActorMethod<[string], UserProfile>,
   'createPost' : ActorMethod<
     [bigint, string, string, [] | [string], string, [] | [OgMetadata]],
     Post
@@ -105,37 +128,36 @@ export interface _SERVICE {
   >,
   'deleteCategory' : ActorMethod<[bigint], boolean>,
   'deletePost' : ActorMethod<[bigint], Post>,
-  /**
-   * / * Fetches Open Graph metadata (title, description, image) from any URL.
-   * /    * Returns null fields if not found.
-   */
   'fetchOgMetadata' : ActorMethod<[string], OgMetadata>,
   'fetchRedditPostTitle' : ActorMethod<[string], [] | [string]>,
+  'fetchRumbleOgMetadata' : ActorMethod<[string], OgMetadata>,
   'fetchRumbleThumbnail' : ActorMethod<[string], [] | [string]>,
-  /**
-   * / * Fetches only the og:image Open Graph tag from a Twitch channel/stream.
-   * /    * Returns ?Text (null if not found).
-   */
   'fetchTwitchThumbnail' : ActorMethod<[string], [] | [string]>,
   'getAllPosts' : ActorMethod<[], Array<Post>>,
   'getAllProfiles' : ActorMethod<[], Array<UserProfile>>,
   'getAllThreads' : ActorMethod<[], Array<Thread>>,
   'getArchivedThreads' : ActorMethod<[], Array<Thread>>,
   'getBans' : ActorMethod<[], Array<Ban>>,
+  'getBookmarks' : ActorMethod<[string], Array<Bookmark>>,
   'getCategories' : ActorMethod<[], Array<Category>>,
   'getPostsByThread' : ActorMethod<[bigint], Array<Post>>,
   'getProfile' : ActorMethod<[string], [] | [UserProfile]>,
+  'getSortedThreads' : ActorMethod<[], Array<Thread>>,
   'getThread' : ActorMethod<[bigint], [] | [Thread]>,
+  'getThreadReports' : ActorMethod<[], Array<ThreadReport>>,
   'getThreads' : ActorMethod<[], Array<Thread>>,
   'initialize' : ActorMethod<[], undefined>,
   'isBanned' : ActorMethod<[string], boolean>,
   'isUsernameTaken' : ActorMethod<[string], boolean>,
   'logAction' : ActorMethod<[string], undefined>,
+  'recordView' : ActorMethod<[bigint, string], boolean>,
   'registerUser' : ActorMethod<
     [string, string],
     { 'ok' : UserProfile } |
       { 'err' : string }
   >,
+  'removeBookmark' : ActorMethod<[string, bigint], boolean>,
+  'reportThread' : ActorMethod<[bigint, string, string], ThreadReport>,
   'setAvatar' : ActorMethod<
     [string, [] | [string]],
     { 'ok' : UserProfile } |

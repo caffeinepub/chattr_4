@@ -2,18 +2,19 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Bookmark, ImagePlus, Loader2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { UserProfile } from "../backendApi";
 import { setUsername as storeSetUsername } from "../store";
 import { generatePixelAvatar } from "../utils/pixelAvatar";
+import BookmarksPanel from "./BookmarksPanel";
 import GifPicker from "./GifPicker";
 
 interface SettingsModalProps {
@@ -174,7 +175,9 @@ export default function SettingsModal({
           backgroundColor: "#111111",
           border: "1px solid #2a2a2a",
           color: "#e0e0e0",
-          maxWidth: 400,
+          maxWidth: 440,
+          maxHeight: "85vh",
+          overflowY: "auto",
         }}
         data-ocid="settings.dialog"
       >
@@ -183,189 +186,222 @@ export default function SettingsModal({
             className="font-mono"
             style={{ color: "#4a9e5c", fontSize: 14 }}
           >
-            Edit Profile
+            Settings
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
-          {/* Avatar section */}
-          <div className="flex flex-col items-center gap-2">
-            <div className="relative" style={{ width: 72, height: 72 }}>
-              <img
-                src={avatarPreview ?? defaultAvatar}
-                alt="Your avatar"
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: "50%",
-                  objectFit: "cover",
-                  border: "2px solid #2a2a2a",
-                }}
-              />
-              {avatarPreview && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAvatarPreview(null);
-                    setAvatarDataUrl(null);
-                    setAvatarChanged(true);
-                  }}
-                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: "#c0392b", color: "#fff" }}
-                  aria-label="Remove avatar"
-                >
-                  <X size={10} />
-                </button>
-              )}
-            </div>
+        <Tabs defaultValue="profile">
+          <TabsList
+            className="font-mono text-xs w-full"
+            style={{
+              backgroundColor: "#0d0d0d",
+              border: "1px solid #2a2a2a",
+              marginBottom: 16,
+            }}
+          >
+            <TabsTrigger
+              value="profile"
+              className="font-mono text-[10px] uppercase tracking-wider flex-1"
+              data-ocid="settings.profile_tab"
+            >
+              Profile
+            </TabsTrigger>
+            <TabsTrigger
+              value="bookmarks"
+              className="font-mono text-[10px] uppercase tracking-wider flex-1 flex items-center gap-1"
+              data-ocid="settings.bookmarks_tab"
+            >
+              <Bookmark size={10} />
+              Bookmarks
+            </TabsTrigger>
+          </TabsList>
 
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowGifPicker(false);
-                  fileInputRef.current?.click();
-                }}
-                className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
-                style={{ color: "#555" }}
-                data-ocid="settings.avatar_upload_button"
-              >
-                <ImagePlus size={11} />
-                {avatarPreview ? "Change" : "Upload"}
-              </button>
-              <span
-                className="font-mono text-[10px]"
-                style={{ color: "#2a2a2a" }}
-              >
-                |
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowGifPicker((v) => !v)}
-                className="font-mono text-[10px] uppercase tracking-wider transition-colors"
-                style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
-                data-ocid="settings.gif_avatar_button"
-              >
-                🎞 GIF
-              </button>
-            </div>
+          <TabsContent value="profile">
+            <div className="space-y-5 pb-4">
+              {/* Avatar section */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative" style={{ width: 72, height: 72 }}>
+                  <img
+                    src={avatarPreview ?? defaultAvatar}
+                    alt="Your avatar"
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid #2a2a2a",
+                    }}
+                  />
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvatarPreview(null);
+                        setAvatarDataUrl(null);
+                        setAvatarChanged(true);
+                      }}
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: "#c0392b", color: "#fff" }}
+                      aria-label="Remove avatar"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
 
-            {/* Inline GIF picker */}
-            {showGifPicker && (
-              <div style={{ maxWidth: 300, width: "100%" }}>
-                <GifPicker
-                  onSelect={(gifUrl) => {
-                    setAvatarPreview(gifUrl);
-                    setAvatarDataUrl(gifUrl);
-                    setAvatarChanged(true);
-                    setShowGifPicker(false);
-                  }}
-                  onClose={() => setShowGifPicker(false)}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowGifPicker(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+                    style={{ color: "#555" }}
+                    data-ocid="settings.avatar_upload_button"
+                  >
+                    <ImagePlus size={11} />
+                    {avatarPreview ? "Change" : "Upload"}
+                  </button>
+                  <span
+                    className="font-mono text-[10px]"
+                    style={{ color: "#2a2a2a" }}
+                  >
+                    |
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowGifPicker((v) => !v)}
+                    className="font-mono text-[10px] uppercase tracking-wider transition-colors"
+                    style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
+                    data-ocid="settings.gif_avatar_button"
+                  >
+                    🎞 GIF
+                  </button>
+                </div>
+
+                {/* Inline GIF picker */}
+                {showGifPicker && (
+                  <div style={{ maxWidth: 300, width: "100%" }}>
+                    <GifPicker
+                      onSelect={(gifUrl) => {
+                        setAvatarPreview(gifUrl);
+                        setAvatarDataUrl(gifUrl);
+                        setAvatarChanged(true);
+                        setShowGifPicker(false);
+                      }}
+                      onClose={() => setShowGifPicker(false)}
+                    />
+                  </div>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileInputChange}
                 />
               </div>
-            )}
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileInputChange}
-            />
-          </div>
+              {/* Username input */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="settings-username"
+                  className="font-mono text-xs uppercase tracking-wider"
+                  style={{ color: "#888" }}
+                >
+                  Username
+                </label>
+                <div className="relative">
+                  <Input
+                    id="settings-username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsernameState(e.target.value);
+                      if (usernameError) {
+                        const err = validateUsername(e.target.value);
+                        if (!err) setUsernameError("");
+                      }
+                    }}
+                    onBlur={handleUsernameBlur}
+                    maxLength={20}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    className="font-mono text-sm pr-14"
+                    style={{
+                      backgroundColor: "#0d0d0d",
+                      border: `1px solid ${usernameError ? "#c0392b" : "#2a2a2a"}`,
+                      color: "#e0e0e0",
+                    }}
+                    data-ocid="settings.username_input"
+                  />
+                  <span
+                    className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px]"
+                    style={{ color: username.length > 18 ? "#c0392b" : "#444" }}
+                  >
+                    {username.length}/20
+                  </span>
+                </div>
 
-          {/* Username input */}
-          <div className="space-y-1.5">
-            <label
-              htmlFor="settings-username"
-              className="font-mono text-xs uppercase tracking-wider"
-              style={{ color: "#888" }}
-            >
-              Username
-            </label>
-            <div className="relative">
-              <Input
-                id="settings-username"
-                value={username}
-                onChange={(e) => {
-                  setUsernameState(e.target.value);
-                  if (usernameError) {
-                    const err = validateUsername(e.target.value);
-                    if (!err) setUsernameError("");
-                  }
-                }}
-                onBlur={handleUsernameBlur}
-                maxLength={20}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                className="font-mono text-sm pr-14"
-                style={{
-                  backgroundColor: "#0d0d0d",
-                  border: `1px solid ${usernameError ? "#c0392b" : "#2a2a2a"}`,
-                  color: "#e0e0e0",
-                }}
-                data-ocid="settings.username_input"
-              />
-              <span
-                className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px]"
-                style={{ color: username.length > 18 ? "#c0392b" : "#444" }}
-              >
-                {username.length}/20
-              </span>
-            </div>
-
-            {(usernameError || checkingUsername) && (
-              <p
-                className="font-mono text-[11px] flex items-center gap-1"
-                style={{ color: usernameError ? "#c0392b" : "#888" }}
-              >
-                {checkingUsername ? (
-                  <>
-                    <Loader2 size={10} className="animate-spin" />
-                    Checking…
-                  </>
-                ) : (
-                  usernameError
+                {(usernameError || checkingUsername) && (
+                  <p
+                    className="font-mono text-[11px] flex items-center gap-1"
+                    style={{ color: usernameError ? "#c0392b" : "#888" }}
+                  >
+                    {checkingUsername ? (
+                      <>
+                        <Loader2 size={10} className="animate-spin" />
+                        Checking…
+                      </>
+                    ) : (
+                      usernameError
+                    )}
+                  </p>
                 )}
-              </p>
-            )}
-          </div>
-        </div>
+              </div>
 
-        <DialogFooter className="gap-2">
-          <Button
-            variant="ghost"
-            onClick={onClose}
-            className="font-mono text-xs"
-            style={{ color: "#888" }}
-            data-ocid="settings.close_button"
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!canSave}
-            className="font-mono text-xs uppercase tracking-wider"
-            style={{
-              backgroundColor: canSave ? "#4a9e5c" : "#1a1a1a",
-              color: canSave ? "#0d0d0d" : "#444",
-              border: canSave ? "none" : "1px solid #2a2a2a",
-            }}
-            data-ocid="settings.save_button"
-          >
-            {saving ? (
-              <span className="flex items-center gap-1.5">
-                <Loader2 size={12} className="animate-spin" />
-                Saving…
-              </span>
-            ) : (
-              "Save"
-            )}
-          </Button>
-        </DialogFooter>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="ghost"
+                  onClick={onClose}
+                  className="font-mono text-xs flex-1"
+                  style={{ color: "#888" }}
+                  data-ocid="settings.close_button"
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={!canSave}
+                  className="font-mono text-xs uppercase tracking-wider flex-1"
+                  style={{
+                    backgroundColor: canSave ? "#4a9e5c" : "#1a1a1a",
+                    color: canSave ? "#0d0d0d" : "#444",
+                    border: canSave ? "none" : "1px solid #2a2a2a",
+                  }}
+                  data-ocid="settings.save_button"
+                >
+                  {saving ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 size={12} className="animate-spin" />
+                      Saving…
+                    </span>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="bookmarks">
+            <BookmarksPanel sessionId={sessionId} onClose={onClose} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

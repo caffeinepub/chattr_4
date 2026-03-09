@@ -15,10 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
+import { Bookmark, Eye, Flag, MessageSquare } from "lucide-react";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { Category, Post, Thread } from "../backendApi";
+import LevelBadge from "../components/LevelBadge";
 import { detectMediaType, getSessionId } from "../store";
 import { getAllLastVisits } from "../utils/localReactions";
 
@@ -78,9 +81,15 @@ interface ThreadCardProps {
   thread: Thread;
   categories: Category[];
   profiles: backendApi.UserProfile[];
+  allPosts: Post[];
   index: number;
   mentionCount: number;
+  sessionId: string;
   onClick: () => void;
+  onBookmark: (threadId: bigint) => void;
+  onReport: (threadId: bigint) => void;
+  isBookmarked: boolean;
+  isReported: boolean;
 }
 
 function LiveDot({ live }: { live: boolean }) {
@@ -214,7 +223,17 @@ function TwitterThumbnailCard({ url }: { url: string }) {
   );
 }
 
-// ─── Rumble thumbnail card (backend OG outcall) ───────────────────
+// ─── Timeout helper ───────────────────────────────────────────
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), ms),
+    ),
+  ]);
+}
+
+// ─── Rumble thumbnail card (OG metadata via backend outcall) ─────
 function RumbleThumbnailCard({ url }: { url: string }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,9 +241,10 @@ function RumbleThumbnailCard({ url }: { url: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setThumbUrl(null);
 
-    backendApi
-      .fetchOgMetadata(url)
+    // Use Microlink to fetch Rumble thumbnails — handles CORS and bot detection server-side
+    withTimeout(backendApi.fetchMicrolinkMetadata(url), 15_000)
       .then((meta) => {
         if (!cancelled) {
           setThumbUrl(meta.imageUrl ?? null);
@@ -355,63 +375,27 @@ function RumbleThumbnailCard({ url }: { url: string }) {
   );
 }
 
-// ─── Twitch thumbnail card (backend fetchTwitchThumbnail) ────────
+// ─── Twitch thumbnail card (CDN-only, no backend scraping) ──────
+// Twitch blocks server scrapers. We build the CDN thumbnail URL directly.
 function TwitchThumbnailCard({ url }: { url: string }) {
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Compute the thumbnail URL synchronously — no async needed
+  const thumbUrl = (() => {
+    // Skip VOD links (no public CDN thumbnail without API key)
+    if (/twitch\.tv\/videos\//i.test(url)) return null;
+    const channelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/i);
+    if (!channelMatch) return null;
+    const channel = channelMatch[1].toLowerCase();
+    if (
+      ["videos", "directory", "settings", "login", "signup"].includes(channel)
+    )
+      return null;
+    return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel}-640x360.jpg`;
+  })();
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setThumbUrl(null);
+  const [imgError, setImgError] = useState(false);
+  const finalThumb = imgError ? null : thumbUrl;
 
-    // Use backend HTTP outcall to fetch the real Twitch thumbnail
-    backendApi
-      .fetchTwitchThumbnail(url)
-      .then((result) => {
-        if (!cancelled) {
-          setThumbUrl(result ?? null);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setThumbUrl(null);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-
-  function handleImgError() {
-    setThumbUrl(null);
-  }
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          backgroundColor: "#111",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
-          Loading…
-        </span>
-      </div>
-    );
-  }
-
-  if (thumbUrl) {
+  if (finalThumb) {
     return (
       <div
         style={{
@@ -425,7 +409,7 @@ function TwitchThumbnailCard({ url }: { url: string }) {
         }}
       >
         <img
-          src={thumbUrl}
+          src={finalThumb}
           alt="Twitch stream thumbnail"
           style={{
             width: "100%",
@@ -433,7 +417,7 @@ function TwitchThumbnailCard({ url }: { url: string }) {
             objectFit: "cover",
             display: "block",
           }}
-          onError={handleImgError}
+          onError={() => setImgError(true)}
         />
         <div
           style={{
@@ -518,13 +502,21 @@ function LinkThumbnailCard({ url }: { url: string }) {
       return;
     }
 
-    backendApi.fetchOgMetadata(url).then((data) => {
-      if (!cancelled) {
-        catalogOgCache.set(url, data);
-        setMeta(data);
-        setLoading(false);
-      }
-    });
+    // Use Microlink for all general link thumbnails (handles CORS + bot detection)
+    withTimeout(backendApi.fetchMicrolinkMetadata(url), 15_000)
+      .then((data) => {
+        if (!cancelled) {
+          catalogOgCache.set(url, data);
+          setMeta(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMeta(null);
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -691,31 +683,32 @@ function extractRedditTitleFromUrl(url: string): string | null {
 
 // ─── Reddit card for catalog thumbnail ───────────────────────────
 function RedditThumbnailCard({ url }: { url: string }) {
-  const [title, setTitle] = useState<string | null>(null);
+  // Extract title from URL slug immediately (reliable, no network needed)
+  const urlTitle = extractRedditTitleFromUrl(url);
+  const [title, setTitle] = useState<string | null>(urlTitle);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // Always set URL slug title immediately as a fallback
+    setTitle(extractRedditTitleFromUrl(url) ?? "Reddit post");
 
-    // Use backend OG metadata — backend now correctly returns titles with spaces
-    backendApi
-      .fetchOgMetadata(url)
+    // Try backend OG metadata for image and possibly a cleaner title (10s timeout)
+    withTimeout(backendApi.fetchOgMetadata(url), 10_000)
       .then((meta) => {
         if (!cancelled) {
-          // Use meta.title as primary source; fall back to URL slug parsing
-          const resolvedTitle =
-            meta.title ?? extractRedditTitleFromUrl(url) ?? "Reddit post";
-          setTitle(resolvedTitle);
+          // Prefer OG title if it looks more complete than URL slug
+          if (meta.title && meta.title.length > 5) {
+            setTitle(meta.title);
+          }
           setImageUrl(meta.imageUrl ?? null);
           setLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setTitle(extractRedditTitleFromUrl(url) ?? "Reddit post");
-          setImageUrl(null);
           setLoading(false);
         }
       });
@@ -1000,9 +993,14 @@ function ThreadCard({
   thread,
   categories,
   profiles,
+  allPosts,
   index,
   mentionCount,
   onClick,
+  onBookmark,
+  onReport,
+  isBookmarked,
+  isReported,
 }: ThreadCardProps) {
   const category = categories.find((c) => c.id === thread.categoryId);
   const live = isThreadLive(thread.lastActivity);
@@ -1012,6 +1010,18 @@ function ThreadCard({
     (p) => p.sessionId === thread.creatorSessionId,
   );
   const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
+
+  // Live user count: distinct session IDs posting in last 10 mins
+  const tenMinsAgo = Date.now() - 10 * 60 * 1000;
+  const liveUsers = new Set(
+    allPosts
+      .filter(
+        (p) =>
+          String(p.threadId) === String(thread.id) &&
+          backendApi.nsToMs(p.createdAt) > tenMinsAgo,
+      )
+      .map((p) => p.authorSessionId),
+  ).size;
 
   return (
     <div
@@ -1051,7 +1061,7 @@ function ThreadCard({
       {/* Thumbnail */}
       <ThreadCardThumbnail thread={thread} />
 
-      {/* Category + Live */}
+      {/* Category + Live + live user count */}
       <div className="flex items-center justify-between mb-2">
         <span
           className="font-mono text-xs px-2 py-0.5 rounded"
@@ -1074,6 +1084,14 @@ function ThreadCard({
           >
             {live ? "LIVE" : "OFFLINE"}
           </span>
+          {liveUsers > 0 && (
+            <span
+              className="font-mono text-[0.75rem]"
+              style={{ color: "#555" }}
+            >
+              {liveUsers}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1092,19 +1110,79 @@ function ThreadCard({
       </h3>
 
       {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs" style={{ color: "#555" }}>
-            {Number(thread.postCount)} posts
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs" style={{ color: "#444" }}>
+      <div className="flex items-center justify-between gap-2">
+        {/* Left: username + timestamp */}
+        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+          {creatorProfile?.level && <LevelBadge level={creatorProfile.level} />}
+          <span
+            className="font-mono text-xs truncate"
+            style={{ color: "#444" }}
+          >
             {creatorName}
           </span>
-          <span className="font-mono text-xs" style={{ color: "#333" }}>
+          <span
+            className="font-mono text-xs shrink-0"
+            style={{ color: "#333" }}
+          >
             {timeAgo(createdAtMs)}
           </span>
+        </div>
+
+        {/* Right: post count icon + view count icon + bookmark + report */}
+        <div
+          className="flex items-center gap-0.5 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="presentation"
+        >
+          {/* Post count */}
+          {Number(thread.postCount) > 0 && (
+            <span
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+              style={{ color: "#444" }}
+              title={`${Number(thread.postCount)} posts`}
+            >
+              <MessageSquare size={11} />
+              {Number(thread.postCount)}
+            </span>
+          )}
+          {/* View count */}
+          {Number(thread.viewCount) > 0 && (
+            <span
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
+              style={{ color: "#444" }}
+              title={`${Number(thread.viewCount)} views`}
+            >
+              <Eye size={11} />
+              {Number(thread.viewCount)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBookmark(thread.id);
+            }}
+            className="p-1 rounded transition-colors hover:bg-white/5"
+            style={{ color: isBookmarked ? "#f0c040" : "#444" }}
+            data-ocid={`catalog.thread.bookmark_button.${index}`}
+            aria-label="Bookmark this chat"
+          >
+            <Bookmark size={11} fill={isBookmarked ? "#f0c040" : "none"} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReport(thread.id);
+            }}
+            className="p-1 rounded transition-colors hover:bg-white/5"
+            style={{ color: isReported ? "#c0392b" : "#444" }}
+            data-ocid={`catalog.thread.report_button.${index}`}
+            aria-label="Report this chat"
+          >
+            <Flag size={11} fill={isReported ? "#c0392b" : "none"} />
+          </button>
         </div>
       </div>
     </div>
@@ -1140,6 +1218,131 @@ function computeMentionCounts(
   return counts;
 }
 
+// ─── Report reasons ───────────────────────────────────────────────
+const CATALOG_REPORT_REASONS = [
+  "Spam",
+  "Harassment",
+  "Misinformation",
+  "Inappropriate Content",
+  "Other",
+] as const;
+
+// ─── Report Chat Modal (catalog) ─────────────────────────────────
+interface CatalogReportModalProps {
+  open: boolean;
+  threadId: bigint | null;
+  sessionId: string;
+  onClose: () => void;
+}
+
+function CatalogReportModal({
+  open,
+  threadId,
+  sessionId,
+  onClose,
+}: CatalogReportModalProps) {
+  const [selectedReason, setSelectedReason] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!selectedReason || !threadId) return;
+    setSubmitting(true);
+    try {
+      await backendApi.reportThread(threadId, sessionId, selectedReason);
+      toast.success("Chat reported");
+      setSelectedReason("");
+      onClose();
+    } catch {
+      toast.error("Failed to submit report");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setSelectedReason("");
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        style={{
+          backgroundColor: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          color: "#e0e0e0",
+        }}
+        data-ocid="catalog_report_chat.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-mono" style={{ color: "#c0392b" }}>
+            Report this chat
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-3">
+          <p className="font-mono text-xs" style={{ color: "#888" }}>
+            Select a reason for reporting this chat:
+          </p>
+          <div className="space-y-2">
+            {CATALOG_REPORT_REASONS.map((reason, i) => (
+              <label
+                key={reason}
+                className="flex items-center gap-2 cursor-pointer"
+                data-ocid={`catalog_report_chat.reason.radio.${i + 1}`}
+              >
+                <input
+                  type="radio"
+                  name="catalog-report-reason"
+                  value={reason}
+                  checked={selectedReason === reason}
+                  onChange={() => setSelectedReason(reason)}
+                  style={{ accentColor: "#c0392b" }}
+                />
+                <span
+                  className="font-mono text-sm"
+                  style={{ color: "#e0e0e0" }}
+                >
+                  {reason}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSelectedReason("");
+              onClose();
+            }}
+            className="font-mono text-xs"
+            style={{ color: "#555" }}
+            data-ocid="catalog_report_chat.cancel_button"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!selectedReason || submitting}
+            className="font-mono text-xs"
+            style={{
+              backgroundColor: "#c0392b",
+              color: "#fff",
+              opacity: !selectedReason || submitting ? 0.5 : 1,
+            }}
+            data-ocid="catalog_report_chat.submit_button"
+          >
+            {submitting ? "Submitting…" : "Submit Report"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Tweet preview data ───────────────────────────────────────────
 interface TweetPreview {
   authorName: string;
@@ -1157,6 +1360,7 @@ export default function CatalogPage() {
   const sessionId = getSessionId();
   const [categories, setCategories] = useState<Category[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [profiles, setProfiles] = useState<backendApi.UserProfile[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<bigint | null>(null);
   const [showNewThread, setShowNewThread] = useState(false);
@@ -1166,6 +1370,18 @@ export default function CatalogPage() {
   const [creating, setCreating] = useState(false);
   const [mentionCounts, setMentionCounts] = useState<Record<string, number>>(
     {},
+  );
+
+  // Report modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportThreadId, setReportThreadId] = useState<bigint | null>(null);
+
+  // Per-thread bookmark / report filled state (keyed by thread id string)
+  const [bookmarkedThreadIds, setBookmarkedThreadIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [reportedThreadIds, setReportedThreadIds] = useState<Set<string>>(
+    new Set(),
   );
 
   // Media attachment state
@@ -1181,27 +1397,31 @@ export default function CatalogPage() {
     null,
   );
   const [linkOgLoading, setLinkOgLoading] = useState(false);
+  const [rumbleOgMeta, setRumbleOgMeta] =
+    useState<backendApi.OgMetadata | null>(null);
+  const [rumbleOgLoading, setRumbleOgLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
-    const [cats, threadList, profiles, allPosts] = await Promise.all([
+    const [cats, sortedThreadList, profileList, posts] = await Promise.all([
       backendApi.getCategories(),
-      backendApi.getThreads(),
+      backendApi.getSortedThreads(),
       backendApi.getAllProfiles(),
       backendApi.getAllPosts(),
     ]);
     setCategories(cats);
-    setThreads(threadList.filter((t) => !t.isArchived && !t.isClosed));
-    setProfiles(profiles);
+    setThreads(sortedThreadList.filter((t) => !t.isArchived && !t.isClosed));
+    setProfiles(profileList);
+    setAllPosts(posts);
     setLoading(false);
 
     // Get my username for mention detection
-    const myProfile = profiles.find((p) => p.sessionId === sessionId);
+    const myProfile = profileList.find((p) => p.sessionId === sessionId);
     const username = myProfile?.username ?? null;
 
     // Compute mention badges
     const lastVisits = getAllLastVisits();
-    const counts = computeMentionCounts(allPosts, username, lastVisits);
+    const counts = computeMentionCounts(posts, username, lastVisits);
     setMentionCounts(counts);
   }, [sessionId]);
 
@@ -1216,15 +1436,31 @@ export default function CatalogPage() {
       ? threads.filter((t) => t.categoryId === selectedCategory)
       : threads;
 
-  // Sort by lastActivity descending
-  const sortedThreads = [...filteredThreads].sort((a, b) =>
-    Number(b.lastActivity - a.lastActivity),
-  );
+  // Already sorted by composite activity score from backend
+  const sortedThreads = filteredThreads;
 
   // Only show categories that have at least one active thread
   const categoriesWithThreads = categories.filter((cat) =>
     threads.some((t) => t.categoryId === cat.id),
   );
+
+  // Bookmark a thread
+  async function handleBookmarkThread(threadId: bigint) {
+    try {
+      await backendApi.addBookmark(sessionId, "thread", threadId);
+      setBookmarkedThreadIds((prev) => new Set([...prev, String(threadId)]));
+      toast.success("Chat bookmarked");
+    } catch {
+      toast.error("Failed to bookmark");
+    }
+  }
+
+  // Open report modal for a thread
+  function handleReportThread(threadId: bigint) {
+    setReportedThreadIds((prev) => new Set([...prev, String(threadId)]));
+    setReportThreadId(threadId);
+    setReportModalOpen(true);
+  }
 
   // Handle media URL input change
   function handleMediaUrlChange(url: string) {
@@ -1233,6 +1469,7 @@ export default function CatalogPage() {
     setTweetPreview(null);
     setRedditPreview(null);
     setLinkOgMeta(null);
+    setRumbleOgMeta(null);
 
     if (!url.trim()) {
       setNewMediaType("none");
@@ -1246,6 +1483,8 @@ export default function CatalogPage() {
       fetchTweetPreview(url);
     } else if (detected === "reddit") {
       fetchDialogRedditPreview(url);
+    } else if (detected === "rumble") {
+      fetchRumblePreview(url);
     } else if (detected === "link") {
       fetchLinkOgPreview(url);
     }
@@ -1255,7 +1494,7 @@ export default function CatalogPage() {
     setLinkOgLoading(true);
     setLinkOgMeta(null);
     try {
-      const data = await backendApi.fetchOgMetadata(url);
+      const data = await backendApi.fetchMicrolinkMetadata(url);
       catalogOgCache.set(url, data);
       setLinkOgMeta(data);
     } catch {
@@ -1265,18 +1504,32 @@ export default function CatalogPage() {
     }
   }
 
+  async function fetchRumblePreview(url: string) {
+    setRumbleOgLoading(true);
+    setRumbleOgMeta(null);
+    try {
+      // Use Microlink — handles CORS and Rumble's bot detection
+      const data = await backendApi.fetchMicrolinkMetadata(url);
+      setRumbleOgMeta(data);
+    } catch {
+      setRumbleOgMeta({});
+    } finally {
+      setRumbleOgLoading(false);
+    }
+  }
+
   async function fetchDialogRedditPreview(url: string) {
     setRedditLoading(true);
-    setRedditPreview(null);
+    // Set slug-derived title immediately
+    const slugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+    setRedditPreview({ title: slugTitle, subreddit: "" });
     try {
       const meta = await backendApi.fetchOgMetadata(url);
-      if (meta.title) {
+      if (meta.title && meta.title.length > 5) {
         setRedditPreview({ title: meta.title, subreddit: "" });
-      } else {
-        setRedditPreview({ title: "Reddit post", subreddit: "" });
       }
     } catch {
-      setRedditPreview({ title: "Reddit post", subreddit: "" });
+      // Keep slug title
     } finally {
       setRedditLoading(false);
     }
@@ -1335,6 +1588,8 @@ export default function CatalogPage() {
     setRedditLoading(false);
     setLinkOgMeta(null);
     setLinkOgLoading(false);
+    setRumbleOgMeta(null);
+    setRumbleOgLoading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -1365,6 +1620,21 @@ export default function CatalogPage() {
       } else if (newMediaUrl.trim() && newMediaType !== "none") {
         thumbnailUrl = newMediaUrl.trim();
         thumbnailType = newMediaType;
+
+        // For Rumble, resolve the real og:image thumbnail URL via Microlink so room cards display it
+        if (newMediaType === "rumble") {
+          try {
+            const ogData =
+              (rumbleOgMeta?.imageUrl ? rumbleOgMeta : null) ??
+              (await backendApi.fetchMicrolinkMetadata(thumbnailUrl));
+            if (ogData.imageUrl) {
+              thumbnailUrl = ogData.imageUrl;
+              thumbnailType = "image";
+            }
+          } catch {
+            // Keep original URL as fallback
+          }
+        }
       }
 
       const thread = await backendApi.createThread(
@@ -1391,7 +1661,9 @@ export default function CatalogPage() {
         }
       }
 
-      toast.success("Thread created");
+      toast.success("Chat created");
+      // Award points for creating a chat
+      backendApi.awardPoints(sessionId, 10n).catch(() => {});
       setShowNewThread(false);
       resetDialog();
       await loadData();
@@ -1436,9 +1708,9 @@ export default function CatalogPage() {
             border: "1px solid #4a9e5c",
             color: "#4a9e5c",
           }}
-          data-ocid="catalog.new_thread_button"
+          data-ocid="catalog.new_chat_button"
         >
-          + New Thread
+          + New Chat
         </Button>
       </div>
 
@@ -1506,14 +1778,20 @@ export default function CatalogPage() {
               thread={thread}
               categories={categories}
               profiles={profiles}
+              allPosts={allPosts}
               index={i + 1}
               mentionCount={mentionCounts[String(thread.id)] ?? 0}
+              sessionId={sessionId}
               onClick={() =>
                 navigate({
                   to: "/thread/$id",
                   params: { id: String(thread.id) },
                 })
               }
+              onBookmark={handleBookmarkThread}
+              onReport={handleReportThread}
+              isBookmarked={bookmarkedThreadIds.has(String(thread.id))}
+              isReported={reportedThreadIds.has(String(thread.id))}
             />
           ))}
         </div>
@@ -1535,11 +1813,11 @@ export default function CatalogPage() {
             maxHeight: "90vh",
             overflowY: "auto",
           }}
-          data-ocid="new_thread.dialog"
+          data-ocid="new_chat.dialog"
         >
           <DialogHeader>
             <DialogTitle className="font-mono" style={{ color: "#4a9e5c" }}>
-              New Thread
+              New Chat
             </DialogTitle>
           </DialogHeader>
 
@@ -1555,7 +1833,7 @@ export default function CatalogPage() {
               </label>
               <Input
                 id="new-thread-title"
-                placeholder="Thread title..."
+                placeholder="Chat title..."
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreateThread()}
@@ -1887,33 +2165,88 @@ export default function CatalogPage() {
 
                   {/* Rumble preview */}
                   {newMediaType === "rumble" && (
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        backgroundColor: "#85c74222",
-                        border: "1px solid #85c74255",
-                        borderRadius: 4,
-                        padding: "6px 10px",
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="#85c742"
-                        aria-hidden="true"
-                        style={{ flexShrink: 0 }}
-                      >
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h4c2.21 0 4 1.79 4 4 0 1.1-.45 2.1-1.17 2.83L17 18h-2.24l-1.5-2H11v-2zm0-4h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" />
-                      </svg>
-                      <span
-                        className="font-mono text-xs"
-                        style={{ color: "#85c742" }}
-                      >
-                        Rumble video
-                      </span>
+                    <div style={{ width: "100%" }}>
+                      {rumbleOgLoading && (
+                        <div
+                          style={{
+                            width: "100%",
+                            aspectRatio: "16/9",
+                            backgroundColor: "#1a1a1a",
+                            borderRadius: 4,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <span
+                            className="font-mono text-xs"
+                            style={{ color: "#555" }}
+                          >
+                            Loading Rumble preview…
+                          </span>
+                        </div>
+                      )}
+                      {!rumbleOgLoading && rumbleOgMeta?.imageUrl && (
+                        <div style={{ width: "100%" }}>
+                          <div
+                            style={{
+                              width: "100%",
+                              aspectRatio: "16/9",
+                              borderRadius: 4,
+                              overflow: "hidden",
+                              position: "relative",
+                            }}
+                          >
+                            <img
+                              src={rumbleOgMeta.imageUrl}
+                              alt={rumbleOgMeta.title ?? "Rumble video"}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          </div>
+                          {rumbleOgMeta.title && (
+                            <p
+                              className="font-mono text-xs mt-1"
+                              style={{ color: "#aaa", margin: "4px 0 0" }}
+                            >
+                              {rumbleOgMeta.title}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {!rumbleOgLoading && !rumbleOgMeta?.imageUrl && (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            backgroundColor: "#85c74222",
+                            border: "1px solid #85c74255",
+                            borderRadius: 4,
+                            padding: "6px 10px",
+                          }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="#85c742"
+                            aria-hidden="true"
+                            style={{ flexShrink: 0 }}
+                          >
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h4c2.21 0 4 1.79 4 4 0 1.1-.45 2.1-1.17 2.83L17 18h-2.24l-1.5-2H11v-2zm0-4h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" />
+                          </svg>
+                          <span
+                            className="font-mono text-xs"
+                            style={{ color: "#85c742" }}
+                          >
+                            Rumble video
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2102,11 +2435,22 @@ export default function CatalogPage() {
               disabled={creating}
               data-ocid="new_thread.submit_button"
             >
-              {creating ? "Creating…" : "Create Thread"}
+              {creating ? "Creating…" : "Create Chat"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Report Chat Modal */}
+      <CatalogReportModal
+        open={reportModalOpen}
+        threadId={reportThreadId}
+        sessionId={sessionId}
+        onClose={() => {
+          setReportModalOpen(false);
+          setReportThreadId(null);
+        }}
+      />
     </div>
   );
 }

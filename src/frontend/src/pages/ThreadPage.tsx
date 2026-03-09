@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Bookmark,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -34,6 +35,7 @@ import { toast } from "sonner";
 import * as backendApi from "../backendApi";
 import type { Category, Post, Thread, UserProfile } from "../backendApi";
 import GifPicker from "../components/GifPicker";
+import LevelBadge from "../components/LevelBadge";
 import VoiceMessagePlayer from "../components/VoiceMessagePlayer";
 import VoiceRecorder from "../components/VoiceRecorder";
 import {
@@ -75,6 +77,18 @@ declare global {
 // OG Metadata cache (module-level, avoids re-fetching)
 // ──────────────────────────────────────────────
 const ogMetadataCache = new Map<string, backendApi.OgMetadata>();
+
+// ──────────────────────────────────────────────
+// Timeout helper — ensures OG fetches never hang forever
+// ──────────────────────────────────────────────
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), ms),
+    ),
+  ]);
+}
 
 // ──────────────────────────────────────────────
 // Constants
@@ -198,6 +212,35 @@ function isEmbedUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Returns true if URL should use Microlink for previews (Rumble + all non-YouTube/Twitch/Reddit/Twitter)
+function shouldUseMicrolink(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    const host = hostname.replace(/^www\./, "");
+    // These have their own dedicated embed/preview logic
+    const backendHandled = [
+      "youtube.com",
+      "youtu.be",
+      "twitch.tv",
+      "twitter.com",
+      "x.com",
+      "reddit.com",
+    ];
+    return !backendHandled.includes(host);
+  } catch {
+    return false;
+  }
+}
+
+// Pick the right metadata fetcher for a preview URL
+function getPreviewFetcher(
+  url: string,
+): (u: string) => Promise<backendApi.OgMetadata> {
+  return shouldUseMicrolink(url)
+    ? backendApi.fetchMicrolinkMetadata
+    : backendApi.fetchOgMetadata;
 }
 
 // Extract the first URL from text that is a link-preview candidate (not an embed)
@@ -485,49 +528,54 @@ interface RedditPostData {
 }
 
 function RedditEmbed({ url }: { url: string }) {
-  const [postData, setPostData] = useState<RedditPostData | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
+  // Immediately derive title from URL slug — no network needed, always works
+  const urlSlugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+
+  const [postData, setPostData] = useState<RedditPostData>({
+    title: urlSlugTitle,
+    subreddit: (() => {
+      try {
+        const m = new URL(url).pathname.match(/\/r\/([^/]+)/);
+        return m ? `r/${m[1]}` : "";
+      } catch {
+        return "";
+      }
+    })(),
+    thumbnail: null,
+    body: null,
+  });
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("ready");
 
   useEffect(() => {
     let cancelled = false;
-    setStatus("loading");
-    setPostData(null);
+    // Set slug-derived title immediately so it's visible right away
+    const slugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+    const subreddit = (() => {
+      try {
+        const m = new URL(url).pathname.match(/\/r\/([^/]+)/);
+        return m ? `r/${m[1]}` : "";
+      } catch {
+        return "";
+      }
+    })();
+    setPostData({ title: slugTitle, subreddit, thumbnail: null, body: null });
+    setStatus("ready");
 
+    // Try to enrich with OG metadata (image + possibly better title)
     backendApi
       .fetchOgMetadata(url)
       .then((meta) => {
         if (!cancelled) {
-          const fallbackTitle =
-            extractRedditTitleFromUrl(url) ??
-            (() => {
-              try {
-                return new URL(url).hostname.replace(/^www\./, "");
-              } catch {
-                return "Reddit";
-              }
-            })();
           setPostData({
-            title: meta.title ?? fallbackTitle,
-            subreddit: "",
+            title: meta.title && meta.title.length > 5 ? meta.title : slugTitle,
+            subreddit,
             thumbnail: meta.imageUrl ?? null,
             body: meta.description ?? null,
           });
-          setStatus("ready");
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          const fallbackTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
-          setPostData({
-            title: fallbackTitle,
-            subreddit: "",
-            thumbnail: null,
-            body: null,
-          });
-          setStatus("ready");
-        }
+        /* keep slug title */
       });
 
     return () => {
@@ -682,8 +730,9 @@ function LinkPreviewCard({
       return;
     }
 
-    backendApi
-      .fetchOgMetadata(url)
+    const fetchFn = getPreviewFetcher(url);
+
+    withTimeout(fetchFn(url), 15_000)
       .then((data) => {
         if (cancelled) return;
         ogMetadataCache.set(url, data);
@@ -1078,12 +1127,13 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
           style={{ paddingBottom: "56.25%", height: 0, position: "relative" }}
         >
           <iframe
-            src={`https://rumble.com/embed/${videoId}/`}
+            src={`https://rumble.com/embed/${videoId}/?pub=4`}
             className="absolute inset-0 w-full h-full border-0 rounded"
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             title="Rumble video"
             referrerPolicy="no-referrer-when-downgrade"
+            frameBorder="0"
           />
         </div>
       </div>
@@ -1292,7 +1342,7 @@ function ReactionRow({
 }
 
 // ──────────────────────────────────────────────
-// Report Modal
+// Report Modal (for messages)
 // ──────────────────────────────────────────────
 interface ReportModalProps {
   open: boolean;
@@ -1307,7 +1357,7 @@ function ReportModal({ open, onClose }: ReportModalProps) {
       toast.error("Please select a reason");
       return;
     }
-    toast.success("Report submitted");
+    toast.success("Message reported");
     setSelectedReason(null);
     onClose();
   }
@@ -1423,6 +1473,157 @@ function ReportModal({ open, onClose }: ReportModalProps) {
 }
 
 // ──────────────────────────────────────────────
+// Report Chat Modal
+// ──────────────────────────────────────────────
+interface ReportChatModalProps {
+  open: boolean;
+  threadId: string;
+  sessionId: string;
+  onClose: () => void;
+}
+
+function ReportChatModal({
+  open,
+  threadId,
+  sessionId,
+  onClose,
+}: ReportChatModalProps) {
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!selectedReason) {
+      toast.error("Please select a reason");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await backendApi.reportThread(
+        BigInt(threadId),
+        sessionId,
+        selectedReason,
+      );
+      toast.success("Chat reported");
+      setSelectedReason(null);
+      onClose();
+    } catch {
+      toast.error("Failed to submit report");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleClose() {
+    setSelectedReason(null);
+    onClose();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) handleClose();
+      }}
+    >
+      <DialogContent
+        style={{
+          backgroundColor: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          color: "#e0e0e0",
+          maxWidth: 400,
+        }}
+        data-ocid="report_chat.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle
+            className="font-mono text-sm"
+            style={{ color: "#e0e0e0" }}
+          >
+            Report this chat
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2 py-2">
+          <p className="font-mono text-xs mb-3" style={{ color: "#888" }}>
+            Select a reason for reporting this chat:
+          </p>
+          {REPORT_REASONS.map((reason, i) => {
+            const isSelected = selectedReason === reason;
+            return (
+              <button
+                type="button"
+                key={reason}
+                onClick={() => setSelectedReason(reason)}
+                className="w-full text-left px-3 py-2.5 rounded-xl font-mono text-sm transition-all"
+                style={{
+                  backgroundColor: isSelected ? "#4a9e5c18" : "#111",
+                  border: `1px solid ${isSelected ? "#4a9e5c" : "#2a2a2a"}`,
+                  color: isSelected ? "#6abd7c" : "#ccc",
+                }}
+                data-ocid={`report_chat.reason.radio.${i + 1}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: "50%",
+                      border: `2px solid ${isSelected ? "#4a9e5c" : "#444"}`,
+                      backgroundColor: isSelected ? "#4a9e5c" : "transparent",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isSelected && (
+                      <div
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: "50%",
+                          backgroundColor: "#fff",
+                        }}
+                      />
+                    )}
+                  </div>
+                  {reason}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="ghost"
+            onClick={handleClose}
+            className="font-mono text-xs"
+            style={{ color: "#888", border: "1px solid #2a2a2a" }}
+            data-ocid="report_chat.cancel_button"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!selectedReason || submitting}
+            className="font-mono text-xs disabled:opacity-40"
+            style={{
+              backgroundColor: selectedReason ? "#4a9e5c" : "#1a1a1a",
+              color: selectedReason ? "#fff" : "#555",
+              border: "none",
+            }}
+            data-ocid="report_chat.submit_button"
+          >
+            {submitting ? "Submitting…" : "Submit Report"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Message Context Menu
 // ──────────────────────────────────────────────
 interface ContextMenuState {
@@ -1439,6 +1640,7 @@ interface MessageContextMenuProps {
   onReply: (post: Post) => void;
   onReport: () => void;
   onDelete: () => void;
+  onBookmark: (postId: bigint) => void;
 }
 
 function MessageContextMenu({
@@ -1449,6 +1651,7 @@ function MessageContextMenu({
   onReply,
   onReport,
   onDelete,
+  onBookmark,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1496,6 +1699,11 @@ function MessageContextMenu({
     onClose();
   }
 
+  function handleBookmark() {
+    onBookmark(state.post.id);
+    onClose();
+  }
+
   async function handleConfirmDelete() {
     try {
       await backendApi.deletePost(BigInt(state.post.id));
@@ -1526,6 +1734,12 @@ function MessageContextMenu({
       icon: <Link2 size={13} />,
       label: "Share",
       onClick: handleShare,
+      danger: false,
+    },
+    {
+      icon: <Bookmark size={13} />,
+      label: "Bookmark",
+      onClick: handleBookmark,
       danger: false,
     },
     {
@@ -1977,11 +2191,14 @@ function ChatBubble({
         >
           {/* Author label */}
           <div
-            className={`font-mono text-[10px] font-bold mb-0.5 ${isOwn ? "text-right" : "text-left"}`}
+            className={`font-mono text-[10px] font-bold mb-0.5 flex items-center gap-1 flex-wrap ${isOwn ? "justify-end" : "justify-start"}`}
             style={{ color: isOwn ? "#6abd7c" : "#4a9e5c" }}
           >
-            {displayName}
-            {isOwn && <span className="ml-1 opacity-60">(you)</span>}
+            {authorProfile?.level && <LevelBadge level={authorProfile.level} />}
+            <span>
+              {displayName}
+              {isOwn && <span className="ml-1 opacity-60">(you)</span>}
+            </span>
           </div>
 
           {/* Reply quote */}
@@ -2233,8 +2450,9 @@ function LinkPreviewMini({ url }: { url: string }) {
       return;
     }
 
-    backendApi
-      .fetchOgMetadata(url)
+    const fetchFn = getPreviewFetcher(url);
+
+    withTimeout(fetchFn(url), 15_000)
       .then((data) => {
         if (cancelled) return;
         ogMetadataCache.set(url, data);
@@ -2510,6 +2728,11 @@ export default function ThreadPage() {
 
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  // Report chat modal state
+  const [reportChatModalOpen, setReportChatModalOpen] = useState(false);
+  // Thread bookmark / report filled state
+  const [threadBookmarked, setThreadBookmarked] = useState(false);
+  const [threadReported, setThreadReported] = useState(false);
 
   // Voice recording state
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -2617,6 +2840,15 @@ export default function ThreadPage() {
   useEffect(() => {
     recordThreadVisit(threadIdStr);
   }, [threadIdStr]);
+
+  // Record view (unique per session) on mount
+  useEffect(() => {
+    const viewKey = `chattr_view_${threadIdStr}`;
+    if (!sessionStorage.getItem(viewKey)) {
+      sessionStorage.setItem(viewKey, "1");
+      backendApi.recordView(threadIdBig, sessionId).catch(() => {});
+    }
+  }, [threadIdBig, threadIdStr, sessionId]);
 
   // Detect whether the title wraps to more than one line
   // biome-ignore lint/correctness/useExhaustiveDependencies: titleCollapsed changes layout so we re-measure; intentional
@@ -2926,6 +3158,25 @@ export default function ThreadPage() {
     });
   }
 
+  async function handleBookmarkMessage(postId: bigint) {
+    try {
+      await backendApi.addBookmark(sessionId, "message", postId);
+      toast.success("Message bookmarked");
+    } catch {
+      toast.error("Failed to bookmark");
+    }
+  }
+
+  async function handleBookmarkThread() {
+    try {
+      await backendApi.addBookmark(sessionId, "thread", threadIdBig);
+      setThreadBookmarked(true);
+      toast.success("Chat bookmarked");
+    } catch {
+      toast.error("Failed to bookmark");
+    }
+  }
+
   async function handleVoiceMessage(audioDataUrl: string, _durationMs: number) {
     const banned = await backendApi.isBanned(sessionId);
     if (banned) {
@@ -2993,7 +3244,11 @@ export default function ThreadPage() {
           linkPreview = ogMetadataCache.get(previewUrlCandidate)!;
         } else {
           try {
-            linkPreview = await backendApi.fetchOgMetadata(previewUrlCandidate);
+            const fetchFn = getPreviewFetcher(previewUrlCandidate);
+            linkPreview = await withTimeout(
+              fetchFn(previewUrlCandidate),
+              15_000,
+            );
             if (linkPreview) {
               ogMetadataCache.set(previewUrlCandidate, linkPreview);
             }
@@ -3017,6 +3272,9 @@ export default function ThreadPage() {
         finalMediaType,
         linkPreview,
       );
+
+      // Award points for posting
+      backendApi.awardPoints(sessionId, 5n).catch(() => {});
 
       // Also store reply mapping in localStorage as fallback for old clients
       if (replyToPost && newPost) {
@@ -3176,7 +3434,7 @@ export default function ThreadPage() {
             <div className="flex items-start gap-1">
               <h1
                 ref={titleRef}
-                className={`font-semibold text-sm leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
+                className={`font-semibold text-base leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
                 style={{ color: "#e0e0e0" }}
               >
                 {thread.title}
@@ -3201,14 +3459,48 @@ export default function ThreadPage() {
               )}
             </div>
 
-            {/* ── Row 3: creator username + timestamp ── */}
+            {/* ── Row 3: creator username + timestamp + bookmark/report (right) ── */}
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="font-mono text-[10px]" style={{ color: "#444" }}>
+              <span
+                className="font-mono"
+                style={{ fontSize: "0.75rem", color: "#444" }}
+              >
                 {creatorName}
               </span>
-              <span className="font-mono text-[10px]" style={{ color: "#333" }}>
+              <span
+                className="font-mono"
+                style={{ fontSize: "0.75rem", color: "#333" }}
+              >
                 {timeAgo(createdAtMs)}
               </span>
+              <div className="flex items-center gap-0.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={handleBookmarkThread}
+                  className="p-1 rounded transition-colors hover:bg-white/5"
+                  style={{ color: threadBookmarked ? "#f0c040" : "#444" }}
+                  aria-label="Bookmark this chat"
+                  data-ocid="thread.bookmark_button"
+                >
+                  <Bookmark
+                    size={12}
+                    fill={threadBookmarked ? "#f0c040" : "none"}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportChatModalOpen(true);
+                    setThreadReported(true);
+                  }}
+                  className="p-1 rounded transition-colors hover:bg-white/5"
+                  style={{ color: threadReported ? "#c0392b" : "#444" }}
+                  aria-label="Report this chat"
+                  data-ocid="thread.report_chat_button"
+                >
+                  <Flag size={12} fill={threadReported ? "#c0392b" : "none"} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3644,13 +3936,22 @@ export default function ThreadPage() {
             setReportModalOpen(true);
           }}
           onDelete={() => loadData()}
+          onBookmark={handleBookmarkMessage}
         />
       )}
 
-      {/* Report Modal */}
+      {/* Report Message Modal */}
       <ReportModal
         open={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
+      />
+
+      {/* Report Chat Modal */}
+      <ReportChatModal
+        open={reportChatModalOpen}
+        threadId={threadIdStr}
+        sessionId={sessionId}
+        onClose={() => setReportChatModalOpen(false)}
       />
     </div>
   );

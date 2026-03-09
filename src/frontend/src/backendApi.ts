@@ -6,7 +6,15 @@ import type { backendInterface } from "./backend";
 import { createActorWithConfig } from "./config";
 
 // ─── Types re-exported ────────────────────────────────────────
-export type { Ban, Category, Post, Thread, UserProfile } from "./backend";
+export type {
+  Ban,
+  Bookmark,
+  Category,
+  Post,
+  Thread,
+  ThreadReport,
+  UserProfile,
+} from "./backend";
 
 // ─── Lazy actor singleton ─────────────────────────────────────
 let _actor: backendInterface | null = null;
@@ -348,14 +356,156 @@ export async function fetchOgMetadata(url: string): Promise<OgMetadata> {
   }
 }
 
-// ─── Twitch thumbnail (via backend HTTP outcall) ───────────────
-export async function fetchTwitchThumbnail(
-  url: string,
-): Promise<string | null> {
+// ─── Rumble OG metadata (uses browser-like User-Agent via backend) ──
+export async function fetchRumbleOgMetadata(url: string): Promise<OgMetadata> {
   try {
     const actor = await getActor();
-    return await actor.fetchTwitchThumbnail(url);
+    return await actor.fetchRumbleOgMetadata(url);
+  } catch {
+    return {};
+  }
+}
+
+// ─── Microlink fetch (for Rumble + general URLs) ─────────────────
+// Uses the public Microlink API (no key needed, free tier).
+// Handles CORS and bot-detection automatically from Microlink's servers.
+// Only use for URLs that are NOT YouTube, Twitch, Reddit, or Twitter/X.
+export async function fetchMicrolinkMetadata(url: string): Promise<OgMetadata> {
+  try {
+    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}`;
+    const res = await fetch(apiUrl);
+    if (!res.ok) return {};
+    const json = await res.json();
+    if (json.status !== "success" || !json.data) return {};
+    const d = json.data;
+    return {
+      title: d.title ?? undefined,
+      description: d.description ?? undefined,
+      imageUrl: d.image?.url ?? d.screenshot?.url ?? undefined,
+      siteName: d.publisher ?? d.author ?? undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+// ─── Twitch thumbnail (CDN-only, no scraping) ─────────────────
+// Twitch blocks server-side scrapers. We detect the URL type in the
+// frontend and build the CDN thumbnail URL directly -- no backend call needed.
+export function fetchTwitchThumbnail(url: string): Promise<string | null> {
+  // VOD link: twitch.tv/videos/{id} — no reliable public thumbnail, use generic fallback
+  const vodMatch = url.match(/twitch\.tv\/videos\/(\d+)/i);
+  if (vodMatch) {
+    // Generic Twitch placeholder — no public VOD thumbnail CDN without an API key
+    return Promise.resolve(null);
+  }
+
+  // Channel link: twitch.tv/{channel}
+  const channelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+  if (channelMatch) {
+    const channel = channelMatch[1].toLowerCase();
+    // Skip reserved paths that aren't channel names
+    if (
+      ["videos", "directory", "settings", "login", "signup"].includes(channel)
+    ) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(
+      `https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel}-640x360.jpg`,
+    );
+  }
+
+  return Promise.resolve(null);
+}
+
+// ─── View tracking ────────────────────────────────────────────
+export async function recordView(
+  threadId: bigint,
+  sessionId: string,
+): Promise<boolean> {
+  try {
+    const actor = await getActor();
+    return await actor.recordView(threadId, sessionId);
+  } catch {
+    return false;
+  }
+}
+
+// ─── Thread reports ───────────────────────────────────────────
+export async function reportThread(
+  threadId: bigint,
+  sessionId: string,
+  reason: string,
+) {
+  const actor = await getActor();
+  return actor.reportThread(threadId, sessionId, reason);
+}
+
+export async function getThreadReports() {
+  try {
+    const actor = await getActor();
+    return await actor.getThreadReports();
+  } catch {
+    return [];
+  }
+}
+
+// ─── Points & leveling ────────────────────────────────────────
+export async function awardPoints(sessionId: string, points: bigint) {
+  try {
+    const actor = await getActor();
+    return await actor.awardPoints(sessionId, points);
   } catch {
     return null;
+  }
+}
+
+export async function checkDailyActivity(sessionId: string) {
+  try {
+    const actor = await getActor();
+    return await actor.checkDailyActivity(sessionId);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Bookmarks ────────────────────────────────────────────────
+export async function addBookmark(
+  sessionId: string,
+  targetType: string,
+  targetId: bigint,
+) {
+  const actor = await getActor();
+  return actor.addBookmark(sessionId, targetType, targetId);
+}
+
+export async function removeBookmark(
+  sessionId: string,
+  bookmarkId: bigint,
+): Promise<boolean> {
+  try {
+    const actor = await getActor();
+    return await actor.removeBookmark(sessionId, bookmarkId);
+  } catch {
+    return false;
+  }
+}
+
+export async function getBookmarks(sessionId: string) {
+  try {
+    const actor = await getActor();
+    return await actor.getBookmarks(sessionId);
+  } catch {
+    return [];
+  }
+}
+
+// ─── Sorted threads (by composite activity score) ─────────────
+export async function getSortedThreads() {
+  try {
+    const actor = await getActor();
+    return await actor.getSortedThreads();
+  } catch {
+    return [];
   }
 }

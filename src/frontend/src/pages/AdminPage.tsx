@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import * as backendApi from "../backendApi";
-import type { Ban, Category, Post, Thread } from "../backendApi";
+import type { Ban, Category, Post, Thread, ThreadReport } from "../backendApi";
 
 const ADMIN_PASSWORD = "lunasimbaliamsammy123";
 
@@ -625,6 +625,98 @@ function CategoriesTab() {
   );
 }
 
+// ─── Reports Tab ──────────────────────────────────────────────
+function ReportsTab() {
+  const [reports, setReports] = useState<ThreadReport[]>([]);
+
+  const refresh = useCallback(async () => {
+    const r = await backendApi.getThreadReports();
+    setReports(r.sort((a, b) => Number(b.createdAt - a.createdAt)));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return (
+    <div>
+      <h2
+        className="font-mono text-sm font-bold mb-4"
+        style={{ color: "#888" }}
+      >
+        Thread Reports ({reports.length})
+      </h2>
+      {reports.length === 0 ? (
+        <p
+          className="font-mono text-xs"
+          style={{ color: "#444" }}
+          data-ocid="admin.reports.empty_state"
+        >
+          No reports yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow style={{ borderColor: "#2a2a2a" }}>
+                {["Thread ID", "Reporter", "Reason", "Time"].map((h) => (
+                  <TableHead
+                    key={h}
+                    className="font-mono text-xs uppercase"
+                    style={{ color: "#555" }}
+                  >
+                    {h}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reports.map((report, i) => (
+                <TableRow
+                  key={String(report.id)}
+                  style={{ borderColor: "#1a1a1a" }}
+                  data-ocid={`admin.report.row.${i + 1}`}
+                >
+                  <TableCell
+                    className="font-mono text-xs"
+                    style={{ color: "#e0e0e0" }}
+                  >
+                    #{String(report.threadId)}
+                  </TableCell>
+                  <TableCell
+                    className="font-mono text-xs"
+                    style={{ color: "#888" }}
+                  >
+                    {report.reporterSessionId.slice(0, 8)}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="font-mono text-xs px-1.5 py-0.5 rounded"
+                      style={{
+                        backgroundColor: "#c0392b22",
+                        color: "#c0392b",
+                        border: "1px solid #c0392b44",
+                      }}
+                    >
+                      {report.reason}
+                    </span>
+                  </TableCell>
+                  <TableCell
+                    className="font-mono text-xs"
+                    style={{ color: "#555" }}
+                  >
+                    {timeAgo(backendApi.nsToMs(report.createdAt))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Admin Dashboard ──────────────────────────────────────────
 function AdminDashboard() {
   return (
@@ -681,6 +773,13 @@ function AdminDashboard() {
           >
             Categories
           </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="font-mono text-xs uppercase tracking-wider"
+            data-ocid="admin.reports_tab"
+          >
+            Reports
+          </TabsTrigger>
         </TabsList>
 
         <div
@@ -698,6 +797,9 @@ function AdminDashboard() {
           </TabsContent>
           <TabsContent value="categories">
             <CategoriesTab />
+          </TabsContent>
+          <TabsContent value="reports">
+            <ReportsTab />
           </TabsContent>
         </div>
       </Tabs>

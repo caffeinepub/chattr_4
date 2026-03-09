@@ -5,12 +5,10 @@ import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Array "mo:core/Array";
 import Iter "mo:core/Iter";
+import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
 import MixinStorage "blob-storage/Mixin";
 import OutCall "http-outcalls/outcall";
-import Text "mo:core/Text";
-import Runtime "mo:core/Runtime";
-
-
 
 actor {
   include MixinStorage();
@@ -32,6 +30,8 @@ actor {
     postCount : Nat;
     thumbnailUrl : ?Text;
     thumbnailType : Text;
+    viewCount : Nat;
+    reportCount : Nat;
   };
 
   type Post = {
@@ -46,16 +46,36 @@ actor {
     linkPreview : ?OgMetadata;
   };
 
-  public type Ban = {
+  type Ban = {
     sessionId : Text;
     reason : Text;
     timestamp : Int;
   };
 
-  public type UserProfile = {
+  type UserProfile = {
     sessionId : Text;
     username : Text;
     avatarUrl : ?Text;
+    points : Nat;
+    level : Text;
+    daysActive : Nat;
+    lastActiveDate : Int;
+  };
+
+  type ThreadReport = {
+    id : Nat;
+    threadId : Nat;
+    reporterSessionId : Text;
+    reason : Text;
+    createdAt : Int;
+  };
+
+  type Bookmark = {
+    id : Nat;
+    sessionId : Text;
+    targetType : Text;
+    targetId : Nat;
+    createdAt : Int;
   };
 
   public type OgMetadata = {
@@ -68,6 +88,8 @@ actor {
   var nextThreadId = 1;
   var nextPostId = 1;
   var nextCategoryId = 1;
+  var nextReportId = 1;
+  var nextBookmarkId = 1;
   var seeded = false;
 
   var categories = Map.empty<Nat, Category>();
@@ -75,6 +97,9 @@ actor {
   var posts = Map.empty<Nat, Post>();
   var bans = Map.empty<Text, Ban>();
   var userProfiles = Map.empty<Text, UserProfile>();
+  var threadReports = Map.empty<Nat, ThreadReport>();
+  var bookmarks = Map.empty<Nat, Bookmark>();
+  var threadViews = Map.empty<Nat, List.List<Text>>();
 
   public shared ({ caller }) func addCategory(name : Text) : async Category {
     let category : Category = {
@@ -118,6 +143,8 @@ actor {
       postCount = 0;
       thumbnailUrl;
       thumbnailType;
+      viewCount = 0;
+      reportCount = 0;
     };
     threads.add(nextThreadId, thread);
     nextThreadId += 1;
@@ -292,6 +319,10 @@ actor {
       sessionId;
       username;
       avatarUrl = null;
+      points = 0;
+      level = "Newcomer";
+      daysActive = 0;
+      lastActiveDate = 0;
     };
     userProfiles.add(sessionId, profile);
     #ok(profile);
@@ -360,6 +391,26 @@ actor {
     findOgTag(pageText, "og:image");
   };
 
+  public shared ({ caller }) func fetchRumbleOgMetadata(url : Text) : async OgMetadata {
+    let browserUserAgent : OutCall.Header = {
+      name = "User-Agent";
+      value = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    };
+    let pageText = await OutCall.httpGetRequest(url, [browserUserAgent], transform);
+
+    let title = findOgTag(pageText, "og:title");
+    let description = findOgTag(pageText, "og:description");
+    let imageUrl = findOgTag(pageText, "og:image");
+    let siteName = findOgTag(pageText, "og:site_name");
+
+    {
+      title;
+      description;
+      imageUrl;
+      siteName;
+    };
+  };
+
   public query ({ caller }) func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
     OutCall.transform(input);
   };
@@ -392,16 +443,6 @@ actor {
     null;
   };
 
-  func dropWhile(text : Text, pattern : Text) : Text {
-    let textArray = text.toArray();
-    let patternArray = pattern.toArray();
-    if (patternArray.size() >= textArray.size()) {
-      return "";
-    };
-    let dropCount = patternArray.size();
-    Text.fromIter(textArray.values().drop(Int.abs(dropCount).toNat()));
-  };
-
   func extractRange(text : Text, start : Nat, size : Nat) : Text {
     let textArray = text.toArray();
     if (start >= textArray.size()) {
@@ -415,10 +456,63 @@ actor {
     Text.fromIter(rangeArray.values());
   };
 
-  /**
-   * Fetches Open Graph metadata (title, description, image) from any URL.
-   * Returns null fields if not found.
-   */
+  func findOgTag(html : Text, tag : Text) : ?Text {
+    // Step 1: find <meta property="og:xxx"
+    let needle = "<meta property=\"" # tag # "\"";
+    switch (findSubstring(html, needle)) {
+      case (null) {
+        // fallback: single-quote variant
+        let singleNeedle = "<meta property='" # tag # "'";
+        switch (findSubstring(html, singleNeedle)) {
+          case (null) { null };
+          case (?startPos) {
+            let sliceLen = Nat.min(500, html.size() - startPos);
+            let tagSlice = extractRange(html, startPos, sliceLen);
+            // find content='
+            switch (findSubstring(tagSlice, "content='")) {
+              case (null) { null };
+              case (?contentPos) {
+                // afterContent starts AFTER the opening single-quote
+                let afterStart = contentPos + 9;
+                let afterContent = extractRange(tagSlice, afterStart, tagSlice.size());
+                switch (findSubstring(afterContent, "'")) {
+                  case (null) { null };
+                  case (?closePos) {
+                    let v = extractRange(afterContent, 0, closePos);
+                    if (v.size() > 0) { ?v } else { null };
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+      case (?startPos) {
+        // Step 2: take 500-char slice from startPos
+        let sliceLen = Nat.min(500, html.size() - startPos);
+        let tagSlice = extractRange(html, startPos, sliceLen);
+        // Step 3: find content=" inside the slice
+        switch (findSubstring(tagSlice, "content=\"")) {
+          case (null) { null };
+          case (?contentPos) {
+            // Step 4: afterContent starts AFTER the opening double-quote (skip 9 chars: content=")
+            let afterStart = contentPos + 9;
+            let afterContent = extractRange(tagSlice, afterStart, tagSlice.size());
+            // Step 5: find the closing " in afterContent
+            switch (findSubstring(afterContent, "\"")) {
+              case (null) { null };
+              case (?closePos) {
+                // Step 6: extract the clean value
+                let v = extractRange(afterContent, 0, closePos);
+                if (v.size() > 0) { ?v } else { null };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+
   public shared ({ caller }) func fetchOgMetadata(url : Text) : async OgMetadata {
     let pageText = await OutCall.httpGetRequest(url, [], transform);
 
@@ -440,51 +534,181 @@ actor {
     metadata.title;
   };
 
-  /**
-   * Fetches only the og:image Open Graph tag from a Twitch channel/stream.
-   * Returns ?Text (null if not found).
-   */
   public shared ({ caller }) func fetchTwitchThumbnail(url : Text) : async ?Text {
     let pageText = await OutCall.httpGetRequest(url, [], transform);
     findOgTag(pageText, "og:image");
   };
 
-  /**
-   * Finds the specified Open Graph tag's content value.
-   */
-  func findOgTag(html : Text, tag : Text) : ?Text {
-    switch (findSubstring(html, tag)) {
-      case (null) { null };
-      case (?tagPos) {
-        let searchRange = extractRange(html, tagPos, 1024);
-        switch (findSubstring(searchRange, "content=\"")) {
+  public shared ({ caller }) func recordView(threadId : Nat, sessionId : Text) : async Bool {
+    switch (threads.get(threadId)) {
+      case (null) { Runtime.trap("Thread not found") };
+      case (?_) {
+        let existingViews = switch (threadViews.get(threadId)) {
           case (null) {
-            switch (findSubstring(searchRange, "content='")) {
-              case (null) { null };
-              case (?singleQuotePos) {
-                let afterContent = dropWhile(searchRange, "content='");
-                switch (findSubstring(afterContent, "'")) {
-                  case (null) { null };
-                  case (?endPos) {
-                    let tagValue = extractRange(afterContent, 0, endPos);
-                    if (tagValue.size() > 0) { ?tagValue } else { null };
-                  };
-                };
-              };
-            };
+            let newList = List.empty<Text>();
+            threadViews.add(threadId, newList);
+            newList;
           };
-          case (?contentPos) {
-            let afterContent = dropWhile(searchRange, "content=\"");
-            switch (findSubstring(afterContent, "\"")) {
-              case (null) { null };
-              case (?endPos) {
-                let tagValue = extractRange(afterContent, 0, endPos);
-                if (tagValue.size() > 0) { ?tagValue } else { null };
-              };
+          case (?list) { list };
+        };
+
+        if (existingViews.any(func(s) { s == sessionId })) {
+          return false;
+        };
+
+        existingViews.add(sessionId);
+
+        switch (threads.get(threadId)) {
+          case (?thread) {
+            let updatedThread = {
+              thread with
+              viewCount = thread.viewCount + 1;
             };
+            threads.add(threadId, updatedThread);
+            true;
           };
+          case (null) { false };
         };
       };
+    };
+  };
+
+  public shared ({ caller }) func reportThread(threadId : Nat, sessionId : Text, reason : Text) : async ThreadReport {
+    switch (threads.get(threadId)) {
+      case (null) { Runtime.trap("Thread not found") };
+      case (?thread) {
+        let report : ThreadReport = {
+          id = nextReportId;
+          threadId;
+          reporterSessionId = sessionId;
+          reason;
+          createdAt = Time.now();
+        };
+
+        threadReports.add(report.id, report);
+
+        let updatedThread : Thread = {
+          thread with
+          reportCount = thread.reportCount + 1;
+        };
+        threads.add(threadId, updatedThread);
+
+        nextReportId += 1;
+        report;
+      };
+    };
+  };
+
+  public query ({ caller }) func getThreadReports() : async [ThreadReport] {
+    threadReports.values().toArray();
+  };
+
+  public shared ({ caller }) func awardPoints(sessionId : Text, points : Nat) : async ?UserProfile {
+    switch (userProfiles.get(sessionId)) {
+      case (null) { null };
+      case (?profile) {
+        let newTotal = profile.points + points;
+
+        let newLevel = if (newTotal >= 1000) {
+          "Elite";
+        } else if (newTotal >= 500) {
+          "Veteran";
+        } else if (newTotal >= 200) {
+          "Contributor";
+        } else if (newTotal >= 50) {
+          "Regular";
+        } else {
+          "Newcomer";
+        };
+
+        let updatedProfile = {
+          profile with
+          points = newTotal;
+          level = newLevel;
+        };
+
+        userProfiles.add(sessionId, updatedProfile);
+        ?updatedProfile;
+      };
+    };
+  };
+
+  public shared ({ caller }) func checkDailyActivity(sessionId : Text) : async UserProfile {
+    switch (userProfiles.get(sessionId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?profile) {
+        let currentDay = Time.now() / 86400000000000;
+        if (profile.lastActiveDate != currentDay) {
+          let updatedProfile = {
+            profile with
+            lastActiveDate = currentDay;
+            daysActive = profile.daysActive + 1;
+            points = profile.points + 10;
+          };
+
+          userProfiles.add(sessionId, updatedProfile);
+          updatedProfile;
+        } else {
+          profile;
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func addBookmark(sessionId : Text, targetType : Text, targetId : Nat) : async Bookmark {
+    let bookmark : Bookmark = {
+      id = nextBookmarkId;
+      sessionId;
+      targetType;
+      targetId;
+      createdAt = Time.now();
+    };
+
+    bookmarks.add(bookmark.id, bookmark);
+    nextBookmarkId += 1;
+    bookmark;
+  };
+
+  public shared ({ caller }) func removeBookmark(_sessionId : Text, bookmarkId : Nat) : async Bool {
+    switch (bookmarks.get(bookmarkId)) {
+      case (null) { false };
+      case (?_) {
+        bookmarks.remove(bookmarkId);
+        true;
+      };
+    };
+  };
+
+  public query ({ caller }) func getBookmarks(sessionId : Text) : async [Bookmark] {
+    bookmarks.values().toArray().filter(func(b) { b.sessionId == sessionId });
+  };
+
+  public query ({ caller }) func getSortedThreads() : async [Thread] {
+    threads
+      .values()
+      .toArray()
+      .filter(func(t) { not t.isArchived })
+      .sort(
+        func(a, b) {
+          let aScore = (a.postCount * 3) + (a.viewCount * 2) + calculateRecentActivityBonus(a.lastActivity);
+          let bScore = (b.postCount * 3) + (b.viewCount * 2) + calculateRecentActivityBonus(b.lastActivity);
+          Nat.compare(bScore, aScore);
+        }
+      );
+  };
+
+  func calculateRecentActivityBonus(lastActivity : Int) : Nat {
+    let now = Time.now();
+    let diff = now - lastActivity;
+
+    if (diff <= 600000000000) { // 10 minutes
+      100;
+    } else if (diff <= 3600000000000) { // 1 hour
+      50;
+    } else if (diff <= 86400000000000) { // 24 hours
+      10;
+    } else {
+      0;
     };
   };
 };
