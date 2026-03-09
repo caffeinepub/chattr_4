@@ -150,7 +150,38 @@ function FaviconImg({ hostname }: { hostname: string }) {
   );
 }
 
-/** 16:9 image card with a bottom caption bar overlay */
+/** Checks if an aspect ratio is close to a target (within tolerance) */
+function isAspectRatioNear(ratio: number, target: number, tol = 0.12): boolean {
+  return Math.abs(ratio - target) / target < tol;
+}
+
+const VIDEO_SITE_HOSTNAMES = [
+  "youtube.com",
+  "youtu.be",
+  "twitch.tv",
+  "rumble.com",
+  "vimeo.com",
+  "dailymotion.com",
+  "tiktok.com",
+  "facebook.com",
+  "instagram.com",
+];
+
+function isVideoSiteUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "");
+    return VIDEO_SITE_HOSTNAMES.some(
+      (h) => hostname === h || hostname.endsWith(`.${h}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** 16:9 image card with a bottom caption bar overlay.
+ *  When isVideoSite=true (or the image is natively 16:9/4:3), renders a plain cover image.
+ *  Otherwise adds a Reddit-style blurred background fill.
+ */
 function OverlayThumbnailCard({
   image,
   hostname,
@@ -158,6 +189,7 @@ function OverlayThumbnailCard({
   title,
   description,
   fallback,
+  isVideoSite = false,
 }: {
   image?: string;
   hostname: string;
@@ -165,12 +197,100 @@ function OverlayThumbnailCard({
   title?: string;
   description?: string;
   fallback: React.ReactNode;
+  isVideoSite?: boolean;
 }) {
   const label = siteName ?? hostname;
+  const [useBlur, setUseBlur] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  function handleImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const img = e.currentTarget;
+    const { naturalWidth, naturalHeight } = img;
+    if (!naturalWidth || !naturalHeight) {
+      setImageLoaded(true);
+      return;
+    }
+    const ratio = naturalWidth / naturalHeight;
+    // Skip blur for 16:9 (~1.778) or 4:3 (~1.333) within ±12%
+    const skipBlur =
+      isVideoSite ||
+      isAspectRatioNear(ratio, 16 / 9) ||
+      isAspectRatioNear(ratio, 4 / 3);
+    setUseBlur(!skipBlur);
+    setImageLoaded(true);
+  }
 
   if (!image) {
     return <>{fallback}</>;
   }
+
+  const captionOverlay = (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: "6px 8px",
+        background: "linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))",
+        zIndex: 3,
+      }}
+    >
+      {/* Row 1: favicon + site name */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          marginBottom: title ? 2 : 0,
+        }}
+      >
+        <FaviconImg hostname={hostname} />
+        <span
+          className="font-mono"
+          style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
+        >
+          {label}
+        </span>
+      </div>
+      {/* Row 2: title */}
+      {title && (
+        <p
+          className="font-mono"
+          style={{
+            fontSize: 11,
+            color: "#eee",
+            margin: 0,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            lineHeight: 1.3,
+          }}
+        >
+          {title}
+        </p>
+      )}
+      {/* Row 3: description */}
+      {description && (
+        <p
+          className="font-mono"
+          style={{
+            fontSize: 10,
+            color: "#999",
+            margin: "2px 0 0",
+            display: "-webkit-box",
+            WebkitLineClamp: 1,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            lineHeight: 1.2,
+          }}
+        >
+          {description}
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -184,85 +304,46 @@ function OverlayThumbnailCard({
         position: "relative",
       }}
     >
+      {/* Blurred background layer — only rendered when blur is active */}
+      {useBlur && imageLoaded && (
+        <img
+          src={image}
+          alt=""
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            filter: "blur(18px) brightness(0.5) saturate(1.2)",
+            transform: "scale(1.1)",
+            zIndex: 0,
+          }}
+        />
+      )}
+
+      {/* Sharp foreground image */}
       <img
         src={image}
         alt={title ?? hostname}
         style={{
+          position: "absolute",
+          inset: 0,
           width: "100%",
           height: "100%",
-          objectFit: "cover",
+          objectFit: useBlur && imageLoaded ? "contain" : "cover",
           display: "block",
+          zIndex: 1,
         }}
+        onLoad={handleImgLoad}
         onError={(e) => {
           (e.currentTarget as HTMLImageElement).style.display = "none";
         }}
       />
-      {/* Bottom caption overlay */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          padding: "6px 8px",
-          background:
-            "linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))",
-        }}
-      >
-        {/* Row 1: favicon + site name */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            marginBottom: title ? 2 : 0,
-          }}
-        >
-          <FaviconImg hostname={hostname} />
-          <span
-            className="font-mono"
-            style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
-          >
-            {label}
-          </span>
-        </div>
-        {/* Row 2: title */}
-        {title && (
-          <p
-            className="font-mono"
-            style={{
-              fontSize: 11,
-              color: "#eee",
-              margin: 0,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              lineHeight: 1.3,
-            }}
-          >
-            {title}
-          </p>
-        )}
-        {/* Row 3: description */}
-        {description && (
-          <p
-            className="font-mono"
-            style={{
-              fontSize: 10,
-              color: "#999",
-              margin: "2px 0 0",
-              display: "-webkit-box",
-              WebkitLineClamp: 1,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              lineHeight: 1.2,
-            }}
-          >
-            {description}
-          </p>
-        )}
-      </div>
+
+      {/* Caption overlay */}
+      {captionOverlay}
     </div>
   );
 }
@@ -387,6 +468,7 @@ function TwitterThumbnailCard({ url }: { url: string }) {
       siteName={tweetAuthor ?? "X / Twitter"}
       title={tweetText ?? undefined}
       fallback={textFallback}
+      isVideoSite={false}
     />
   );
 }
@@ -478,6 +560,7 @@ function RumbleThumbnailCard({ url }: { url: string }) {
       title={meta?.title}
       description={meta?.description}
       fallback={fallback}
+      isVideoSite={true}
     />
   );
 }
@@ -719,6 +802,7 @@ function LinkThumbnailCard({ url }: { url: string }) {
       title={meta?.title}
       description={meta?.description}
       fallback={textFallback}
+      isVideoSite={isVideoSiteUrl(url)}
     />
   );
 }
@@ -860,6 +944,7 @@ function RedditThumbnailCard({ url }: { url: string }) {
       title={title}
       description={meta?.description}
       fallback={textFallback}
+      isVideoSite={false}
     />
   );
 }
@@ -872,28 +957,26 @@ function ThreadCardThumbnail({ thread }: { thread: Thread }) {
   if (!type || type === "none" || !url) return null;
 
   if (type === "image" || type === "uploaded_image") {
-    return (
+    // Use the overlay card so portrait/square uploads get the blurred background fill.
+    // isVideoSite=false so 16:9 / 4:3 detection runs; those skip the blur automatically.
+    const textFallback = (
       <div
         style={{
           width: "100%",
           aspectRatio: "16 / 9",
           borderRadius: 6,
           marginBottom: 8,
-          overflow: "hidden",
           backgroundColor: "#111",
         }}
-      >
-        <img
-          src={url}
-          alt="Thread thumbnail"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-      </div>
+      />
+    );
+    return (
+      <OverlayThumbnailCard
+        image={url}
+        hostname=""
+        fallback={textFallback}
+        isVideoSite={false}
+      />
     );
   }
 
