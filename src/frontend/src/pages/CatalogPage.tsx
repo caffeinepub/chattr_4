@@ -565,88 +565,91 @@ function RumbleThumbnailCard({ url }: { url: string }) {
   );
 }
 
-// ─── Twitch thumbnail card (CDN-only, no backend scraping) ──────
-// Twitch blocks server scrapers. We build the CDN thumbnail URL directly.
-function TwitchThumbnailCard({ url }: { url: string }) {
-  // Compute the thumbnail URL synchronously — no async needed
-  const thumbUrl = (() => {
-    // Skip VOD links (no public CDN thumbnail without API key)
-    if (/twitch\.tv\/videos\//i.test(url)) return null;
-    const channelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/i);
-    if (!channelMatch) return null;
-    const channel = channelMatch[1].toLowerCase();
-    if (
-      ["videos", "directory", "settings", "login", "signup"].includes(channel)
+// ─── YouTube thumbnail card (oEmbed title + OverlayThumbnailCard) ──
+function YouTubeThumbnailCard({ url }: { url: string }) {
+  const videoId = extractYouTubeId(url);
+  const [title, setTitle] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
     )
-      return null;
-    return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel}-640x360.jpg`;
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.title) setTitle(data.title);
+      })
+      .catch(() => {
+        // Keep undefined; fallback will show "YouTube video"
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const fallback = (
+    <div
+      style={{
+        width: "100%",
+        aspectRatio: "16 / 9",
+        borderRadius: 6,
+        marginBottom: 8,
+        backgroundColor: "#111",
+      }}
+    />
+  );
+
+  if (!videoId) return fallback;
+
+  return (
+    <OverlayThumbnailCard
+      image={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+      hostname="youtube.com"
+      siteName="YouTube"
+      title={title ?? "YouTube video"}
+      fallback={fallback}
+      isVideoSite={true}
+    />
+  );
+}
+
+// ─── Twitch thumbnail card (CDN thumbnail + oEmbed title) ──────────
+// Thumbnail from Twitch CDN. Stream title from oEmbed API (no API key needed).
+function TwitchThumbnailCard({ url }: { url: string }) {
+  const { thumbUrl, channel } = (() => {
+    if (/twitch\.tv\/videos\//i.test(url))
+      return { thumbUrl: null, channel: null };
+    const channelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/i);
+    if (!channelMatch) return { thumbUrl: null, channel: null };
+    const ch = channelMatch[1].toLowerCase();
+    if (["videos", "directory", "settings", "login", "signup"].includes(ch))
+      return { thumbUrl: null, channel: null };
+    return {
+      thumbUrl: `https://static-cdn.jtvnw.net/previews-ttv/live_user_${ch}-640x360.jpg`,
+      channel: ch,
+    };
   })();
 
-  const [imgError, setImgError] = useState(false);
-  const finalThumb = imgError ? null : thumbUrl;
+  const [streamTitle, setStreamTitle] = useState<string | null>(null);
 
-  if (finalThumb) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          overflow: "hidden",
-          backgroundColor: "#111",
-          position: "relative",
-        }}
-      >
-        <img
-          src={finalThumb}
-          alt="Twitch stream thumbnail"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-          onError={() => setImgError(true)}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.35)",
-          }}
-        >
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              backgroundColor: "rgba(100,65,164,0.9)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="white"
-              aria-hidden="true"
-            >
-              <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
-            </svg>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!channel) return;
+    // Use Twitch oEmbed to get the stream title
+    fetch(
+      `https://api.twitch.tv/v5/oembed?url=https://www.twitch.tv/${channel}`,
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.title) setStreamTitle(data.title);
+      })
+      .catch(() => {
+        /* fallback to default title */
+      });
+  }, [channel]);
 
-  // Fallback badge
-  return (
+  // Fallback badge shown when no channel/thumb available
+  const fallbackBadge = (
     <div
       style={{
         width: "100%",
@@ -674,6 +677,20 @@ function TwitchThumbnailCard({ url }: { url: string }) {
         Twitch stream
       </span>
     </div>
+  );
+
+  if (!thumbUrl || !channel) return fallbackBadge;
+
+  return (
+    <OverlayThumbnailCard
+      image={thumbUrl}
+      hostname="twitch.tv"
+      siteName="Twitch"
+      title={streamTitle ?? `Watch ${channel} on Twitch`}
+      description={streamTitle ? channel : undefined}
+      fallback={fallbackBadge}
+      isVideoSite={true}
+    />
   );
 }
 
@@ -981,65 +998,7 @@ function ThreadCardThumbnail({ thread }: { thread: Thread }) {
   }
 
   if (type === "youtube") {
-    const videoId = extractYouTubeId(url);
-    if (!videoId) return null;
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          overflow: "hidden",
-          backgroundColor: "#111",
-          position: "relative",
-        }}
-      >
-        <img
-          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
-          alt="YouTube thumbnail"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-        {/* Play button overlay */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.35)",
-          }}
-        >
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              backgroundColor: "rgba(255,0,0,0.85)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="white"
-              aria-hidden="true"
-            >
-              <polygon points="3,2 10,6 3,10" />
-            </svg>
-          </div>
-        </div>
-      </div>
-    );
+    return <YouTubeThumbnailCard url={url} />;
   }
 
   if (type === "twitter") {
