@@ -25,8 +25,35 @@ import LevelBadge from "../components/LevelBadge";
 import { detectMediaType, getSessionId } from "../store";
 import { getAllLastVisits } from "../utils/localReactions";
 
-// ─── OG metadata cache for catalog (module-level) ────────────────
-const catalogOgCache = new Map<string, backendApi.OgMetadata>();
+// ─── LinkMeta shared utility ──────────────────────────────────────
+interface LinkMetaData {
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+const linkMetaCache = new Map<string, LinkMetaData>();
+
+async function fetchLinkMeta(url: string): Promise<LinkMetaData> {
+  if (linkMetaCache.has(url)) return linkMetaCache.get(url)!;
+  try {
+    const resp = await fetch(
+      `https://linkmeta.dev/api/v1/extract?url=${encodeURIComponent(url)}`,
+    );
+    if (!resp.ok) return {};
+    const json = await resp.json();
+    const data: LinkMetaData = {
+      title: json.data?.title ?? undefined,
+      description: json.data?.description ?? undefined,
+      image: json.data?.image ?? undefined,
+      siteName: json.data?.siteName ?? undefined,
+    };
+    linkMetaCache.set(url, data);
+    return data;
+  } catch {
+    return {};
+  }
+}
 
 // A thread is considered "live" if it had activity within the last 10 minutes
 function isThreadLive(lastActivityNs: bigint): boolean {
@@ -108,55 +135,184 @@ function LiveDot({ live }: { live: boolean }) {
   );
 }
 
-// ─── Tweet text data ──────────────────────────────────────────────
-interface TweetCardData {
-  authorName: string;
-  text: string;
+// ─── Shared overlay thumbnail helper ─────────────────────────────
+function FaviconImg({ hostname }: { hostname: string }) {
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=16`}
+      alt=""
+      aria-hidden="true"
+      style={{ width: 12, height: 12, objectFit: "contain", flexShrink: 0 }}
+      onError={() => setVisible(false)}
+    />
+  );
 }
 
-async function fetchTweetCardData(url: string): Promise<TweetCardData | null> {
-  try {
-    const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
-    const resp = await fetch(oembedUrl);
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const div = document.createElement("div");
-    div.innerHTML = data.html ?? "";
-    const paragraphs = div.querySelectorAll("p");
-    const rawText =
-      paragraphs.length > 0
-        ? (paragraphs[0].textContent ?? "")
-        : (div.textContent ?? "");
-    const trimmed = rawText.trim().slice(0, 100);
-    return {
-      authorName: data.author_name ?? "X / Twitter",
-      text: trimmed,
-    };
-  } catch {
-    return null;
+/** 16:9 image card with a bottom caption bar overlay */
+function OverlayThumbnailCard({
+  image,
+  hostname,
+  siteName,
+  title,
+  description,
+  fallback,
+}: {
+  image?: string;
+  hostname: string;
+  siteName?: string;
+  title?: string;
+  description?: string;
+  fallback: React.ReactNode;
+}) {
+  const label = siteName ?? hostname;
+
+  if (!image) {
+    return <>{fallback}</>;
   }
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        aspectRatio: "16 / 9",
+        borderRadius: 6,
+        marginBottom: 8,
+        overflow: "hidden",
+        backgroundColor: "#111",
+        position: "relative",
+      }}
+    >
+      <img
+        src={image}
+        alt={title ?? hostname}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+        }}
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+      />
+      {/* Bottom caption overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: "6px 8px",
+          background:
+            "linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))",
+        }}
+      >
+        {/* Row 1: favicon + site name */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginBottom: title ? 2 : 0,
+          }}
+        >
+          <FaviconImg hostname={hostname} />
+          <span
+            className="font-mono"
+            style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
+          >
+            {label}
+          </span>
+        </div>
+        {/* Row 2: title */}
+        {title && (
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 11,
+              color: "#eee",
+              margin: 0,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: 1.3,
+            }}
+          >
+            {title}
+          </p>
+        )}
+        {/* Row 3: description */}
+        {description && (
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 10,
+              color: "#999",
+              margin: "2px 0 0",
+              display: "-webkit-box",
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: 1.2,
+            }}
+          >
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
-// ─── Twitter thumbnail card ───────────────────────────────────────
+// ─── Twitter thumbnail card (via LinkMeta for image) ─────────────
 function TwitterThumbnailCard({ url }: { url: string }) {
-  const [cardData, setCardData] = useState<TweetCardData | null>(null);
+  const [meta, setMeta] = useState<LinkMetaData | null>(null);
+  const [tweetText, setTweetText] = useState<string | null>(null);
+  const [tweetAuthor, setTweetAuthor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchTweetCardData(url).then((data) => {
-      if (!cancelled) {
-        setCardData(data);
-        setLoading(false);
+
+    // Fetch LinkMeta (for image) and oEmbed (for tweet text) in parallel
+    Promise.all([
+      fetchLinkMeta(url),
+      fetch(
+        `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`,
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ]).then(([linkData, oembedData]) => {
+      if (cancelled) return;
+      setMeta(linkData);
+
+      if (oembedData) {
+        const div = document.createElement("div");
+        div.innerHTML = oembedData.html ?? "";
+        const paragraphs = div.querySelectorAll("p");
+        const rawText =
+          paragraphs.length > 0
+            ? (paragraphs[0].textContent ?? "")
+            : (div.textContent ?? "");
+        setTweetText(rawText.trim().slice(0, 100));
+        setTweetAuthor(oembedData.author_name ?? null);
       }
+
+      setLoading(false);
     });
+
     return () => {
       cancelled = true;
     };
   }, [url]);
 
-  return (
+  const hostname = "twitter.com";
+
+  const textFallback = (
     <div
       style={{
         width: "100%",
@@ -194,11 +350,11 @@ function TwitterThumbnailCard({ url }: { url: string }) {
             className="font-mono text-[10px] font-semibold"
             style={{ color: "#aaa" }}
           >
-            {cardData?.authorName ?? "X / Twitter"}
+            {tweetAuthor ?? "X / Twitter"}
           </span>
         )}
       </div>
-      {!loading && cardData?.text && (
+      {!loading && tweetText && (
         <p
           className="font-mono text-[11px] leading-snug"
           style={{
@@ -210,51 +366,50 @@ function TwitterThumbnailCard({ url }: { url: string }) {
             margin: 0,
           }}
         >
-          {cardData.text}
-          {cardData.text.length >= 100 ? "…" : ""}
+          {tweetText}
+          {tweetText.length >= 100 ? "…" : ""}
         </p>
       )}
-      {!loading && !cardData && (
+      {!loading && !tweetText && (
         <span className="font-mono text-[10px]" style={{ color: "#555" }}>
           X / Twitter post
         </span>
       )}
     </div>
   );
+
+  if (loading) return textFallback;
+
+  return (
+    <OverlayThumbnailCard
+      image={meta?.image}
+      hostname={hostname}
+      siteName={tweetAuthor ?? "X / Twitter"}
+      title={tweetText ?? undefined}
+      fallback={textFallback}
+    />
+  );
 }
 
-// ─── Timeout helper ───────────────────────────────────────────
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), ms),
-    ),
-  ]);
-}
-
-// ─── Rumble thumbnail card (OG metadata via backend outcall) ─────
+// ─── Rumble thumbnail card (via LinkMeta) ────────────────────────
 function RumbleThumbnailCard({ url }: { url: string }) {
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [meta, setMeta] = useState<LinkMetaData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setThumbUrl(null);
 
-    // fetchRumbleOgMetadata uses a browser-like User-Agent to bypass Rumble's bot detection
-    // 10s timeout so the card never hangs forever if the backend outcall stalls
-    withTimeout(backendApi.fetchRumbleOgMetadata(url), 10_000)
-      .then((meta) => {
+    fetchLinkMeta(url)
+      .then((data) => {
         if (!cancelled) {
-          setThumbUrl(meta.imageUrl ?? null);
+          setMeta(data);
           setLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setThumbUrl(null);
+          setMeta(null);
           setLoading(false);
         }
       });
@@ -264,88 +419,7 @@ function RumbleThumbnailCard({ url }: { url: string }) {
     };
   }, [url]);
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          backgroundColor: "#111",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
-          Loading…
-        </span>
-      </div>
-    );
-  }
-
-  if (thumbUrl) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          overflow: "hidden",
-          backgroundColor: "#111",
-          position: "relative",
-        }}
-      >
-        <img
-          src={thumbUrl}
-          alt="Rumble video thumbnail"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.35)",
-          }}
-        >
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              backgroundColor: "rgba(133,199,66,0.9)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="white"
-              aria-hidden="true"
-            >
-              <polygon points="6,4 20,12 6,20" />
-            </svg>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Fallback badge when no thumbnail found
-  return (
+  const fallback = (
     <div
       style={{
         width: "100%",
@@ -373,6 +447,38 @@ function RumbleThumbnailCard({ url }: { url: string }) {
         Rumble video
       </span>
     </div>
+  );
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          aspectRatio: "16 / 9",
+          borderRadius: 6,
+          marginBottom: 8,
+          backgroundColor: "#111",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          Loading…
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <OverlayThumbnailCard
+      image={meta?.image}
+      hostname="rumble.com"
+      siteName={meta?.siteName ?? "Rumble"}
+      title={meta?.title}
+      description={meta?.description}
+      fallback={fallback}
+    />
   );
 }
 
@@ -488,25 +594,18 @@ function TwitchThumbnailCard({ url }: { url: string }) {
   );
 }
 
-// ─── Generic link thumbnail card (uses backend OG outcall) ────────
+// ─── Generic link thumbnail card (via LinkMeta) ───────────────────
 function LinkThumbnailCard({ url }: { url: string }) {
-  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(null);
+  const [meta, setMeta] = useState<LinkMetaData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    if (catalogOgCache.has(url)) {
-      setMeta(catalogOgCache.get(url)!);
-      setLoading(false);
-      return;
-    }
-
-    withTimeout(backendApi.fetchOgMetadata(url), 10_000)
+    fetchLinkMeta(url)
       .then((data) => {
         if (!cancelled) {
-          catalogOgCache.set(url, data);
           setMeta(data);
           setLoading(false);
         }
@@ -551,52 +650,8 @@ function LinkThumbnailCard({ url }: { url: string }) {
     );
   }
 
-  if (meta?.imageUrl) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          aspectRatio: "16 / 9",
-          borderRadius: 6,
-          marginBottom: 8,
-          overflow: "hidden",
-          backgroundColor: "#111",
-          position: "relative",
-        }}
-      >
-        <img
-          src={meta.imageUrl}
-          alt={meta.title ?? hostname}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: "6px 8px",
-            background: "linear-gradient(transparent, rgba(0,0,0,0.7))",
-          }}
-        >
-          <span className="font-mono text-[10px]" style={{ color: "#ccc" }}>
-            {hostname}
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  // Fallback: text card
-  return (
+  // Fallback: text card (no image)
+  const textFallback = (
     <div
       style={{
         width: "100%",
@@ -612,29 +667,15 @@ function LinkThumbnailCard({ url }: { url: string }) {
           display: "flex",
           alignItems: "center",
           gap: 6,
-          marginBottom: 4,
+          marginBottom: meta?.title ? 4 : 0,
         }}
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#888"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          style={{ flexShrink: 0 }}
-        >
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-        </svg>
+        <FaviconImg hostname={hostname} />
         <span
           className="font-mono text-[10px] font-semibold"
           style={{ color: "#888" }}
         >
-          {hostname}
+          {meta?.siteName ?? hostname}
         </span>
       </div>
       {meta?.title && (
@@ -652,7 +693,33 @@ function LinkThumbnailCard({ url }: { url: string }) {
           {meta.title}
         </p>
       )}
+      {meta?.description && (
+        <p
+          className="font-mono text-[10px] leading-snug mt-1"
+          style={{
+            color: "#666",
+            display: "-webkit-box",
+            WebkitLineClamp: 1,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            margin: "4px 0 0",
+          }}
+        >
+          {meta.description}
+        </p>
+      )}
     </div>
+  );
+
+  return (
+    <OverlayThumbnailCard
+      image={meta?.image}
+      hostname={hostname}
+      siteName={meta?.siteName}
+      title={meta?.title}
+      description={meta?.description}
+      fallback={textFallback}
+    />
   );
 }
 
@@ -684,33 +751,39 @@ function extractRedditTitleFromUrl(url: string): string | null {
 // ─── Reddit card for catalog thumbnail ───────────────────────────
 function RedditThumbnailCard({ url }: { url: string }) {
   // Extract title from URL slug immediately (reliable, no network needed)
-  const urlTitle = extractRedditTitleFromUrl(url);
-  const [title, setTitle] = useState<string | null>(urlTitle);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const urlTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+  const [title, setTitle] = useState<string>(urlTitle);
+  const [meta, setMeta] = useState<LinkMetaData | null>(null);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const subreddit = (() => {
+    try {
+      const m = new URL(url).pathname.match(/\/r\/([^/]+)/);
+      return m ? `r/${m[1]}` : "";
+    } catch {
+      return "";
+    }
+  })();
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    // Always set URL slug title immediately as a fallback
-    setTitle(extractRedditTitleFromUrl(url) ?? "Reddit post");
+    const slugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
+    setTitle(slugTitle);
+    setMeta(null);
+    setImageLoading(true);
 
-    // Try backend OG metadata for image and possibly a cleaner title (10s timeout)
-    withTimeout(backendApi.fetchOgMetadata(url), 10_000)
-      .then((meta) => {
+    fetchLinkMeta(url)
+      .then((data) => {
         if (!cancelled) {
-          // Prefer OG title if it looks more complete than URL slug
-          if (meta.title && meta.title.length > 5) {
-            setTitle(meta.title);
+          if (data.title && data.title.length > 5) {
+            setTitle(data.title);
           }
-          setImageUrl(meta.imageUrl ?? null);
-          setLoading(false);
+          setMeta(data);
+          setImageLoading(false);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setImageLoading(false);
       });
 
     return () => {
@@ -718,92 +791,7 @@ function RedditThumbnailCard({ url }: { url: string }) {
     };
   }, [url]);
 
-  // If we have an image, show 16:9 thumbnail with Reddit logo overlay + title below
-  if (!loading && imageUrl) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          borderRadius: 6,
-          marginBottom: 8,
-          backgroundColor: "#111",
-          border: "1px solid #2a2a2a",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: "100%",
-            aspectRatio: "16 / 9",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <img
-            src={imageUrl}
-            alt="Reddit post"
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: 6,
-              left: 6,
-              width: 20,
-              height: 20,
-              borderRadius: "50%",
-              backgroundColor: "rgba(0,0,0,0.6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 20 20"
-              fill="#ff4500"
-              aria-hidden="true"
-            >
-              <circle cx="10" cy="10" r="10" fill="#ff4500" />
-              <path
-                d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
-                fill="white"
-              />
-            </svg>
-          </div>
-        </div>
-        {title && (
-          <div style={{ padding: "6px 10px" }}>
-            <p
-              className="font-mono text-[11px] leading-snug"
-              style={{
-                color: "#bbb",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-                margin: 0,
-              }}
-            >
-              {title}
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Text-only card (no image)
-  return (
+  const textFallback = (
     <div
       style={{
         width: "100%",
@@ -819,10 +807,9 @@ function RedditThumbnailCard({ url }: { url: string }) {
           display: "flex",
           alignItems: "center",
           gap: 6,
-          marginBottom: 4,
+          marginBottom: title ? 4 : 0,
         }}
       >
-        {/* Reddit alien logo (Snoo) */}
         <svg
           width="14"
           height="14"
@@ -841,33 +828,39 @@ function RedditThumbnailCard({ url }: { url: string }) {
           className="font-mono text-[10px] font-semibold"
           style={{ color: "#ff4500" }}
         >
-          Reddit
+          {subreddit || "Reddit"}
         </span>
       </div>
-      {loading ? (
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
-          Loading post…
-        </span>
-      ) : title ? (
-        <p
-          className="font-mono text-[11px] leading-snug"
-          style={{
-            color: "#bbb",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            margin: 0,
-          }}
-        >
-          {title}
-        </p>
-      ) : (
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
-          Reddit post
-        </span>
-      )}
+      <p
+        className="font-mono text-[11px] leading-snug"
+        style={{
+          color: "#bbb",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          margin: 0,
+        }}
+      >
+        {title}
+      </p>
     </div>
+  );
+
+  if (imageLoading) {
+    // Show text immediately while image loads in background
+    return textFallback;
+  }
+
+  return (
+    <OverlayThumbnailCard
+      image={meta?.image}
+      hostname="reddit.com"
+      siteName={subreddit || "Reddit"}
+      title={title}
+      description={meta?.description}
+      fallback={textFallback}
+    />
   );
 }
 
@@ -1494,9 +1487,8 @@ export default function CatalogPage() {
     setLinkOgLoading(true);
     setLinkOgMeta(null);
     try {
-      const data = await backendApi.fetchOgMetadata(url);
-      catalogOgCache.set(url, data);
-      setLinkOgMeta(data);
+      const data = await fetchLinkMeta(url);
+      setLinkOgMeta({ imageUrl: data.image, title: data.title });
     } catch {
       setLinkOgMeta({});
     } finally {
@@ -1508,8 +1500,8 @@ export default function CatalogPage() {
     setRumbleOgLoading(true);
     setRumbleOgMeta(null);
     try {
-      const data = await backendApi.fetchRumbleOgMetadata(url);
-      setRumbleOgMeta(data);
+      const data = await fetchLinkMeta(url);
+      setRumbleOgMeta({ imageUrl: data.image, title: data.title });
     } catch {
       setRumbleOgMeta({});
     } finally {
@@ -1523,7 +1515,7 @@ export default function CatalogPage() {
     const slugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
     setRedditPreview({ title: slugTitle, subreddit: "" });
     try {
-      const meta = await backendApi.fetchOgMetadata(url);
+      const meta = await fetchLinkMeta(url);
       if (meta.title && meta.title.length > 5) {
         setRedditPreview({ title: meta.title, subreddit: "" });
       }
@@ -1623,11 +1615,12 @@ export default function CatalogPage() {
         // For Rumble, resolve the real og:image thumbnail URL so room cards display it
         if (newMediaType === "rumble") {
           try {
-            const ogData =
-              rumbleOgMeta ??
-              (await backendApi.fetchRumbleOgMetadata(thumbnailUrl));
-            if (ogData.imageUrl) {
-              thumbnailUrl = ogData.imageUrl;
+            const ogData = rumbleOgMeta ?? (await fetchLinkMeta(thumbnailUrl));
+            const imageUrl =
+              (ogData as { imageUrl?: string; image?: string }).imageUrl ??
+              (ogData as { image?: string }).image;
+            if (imageUrl) {
+              thumbnailUrl = imageUrl;
               thumbnailType = "image";
             }
           } catch {

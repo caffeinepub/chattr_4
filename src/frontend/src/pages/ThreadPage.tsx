@@ -74,20 +74,35 @@ declare global {
 }
 
 // ──────────────────────────────────────────────
-// OG Metadata cache (module-level, avoids re-fetching)
+// LinkMeta shared utility
 // ──────────────────────────────────────────────
-const ogMetadataCache = new Map<string, backendApi.OgMetadata>();
+interface LinkMetaData {
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+const linkMetaCache = new Map<string, LinkMetaData>();
 
-// ──────────────────────────────────────────────
-// Timeout helper — ensures OG fetches never hang forever
-// ──────────────────────────────────────────────
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), ms),
-    ),
-  ]);
+async function fetchLinkMeta(url: string): Promise<LinkMetaData> {
+  if (linkMetaCache.has(url)) return linkMetaCache.get(url)!;
+  try {
+    const resp = await fetch(
+      `https://linkmeta.dev/api/v1/extract?url=${encodeURIComponent(url)}`,
+    );
+    if (!resp.ok) return {};
+    const json = await resp.json();
+    const data: LinkMetaData = {
+      title: json.data?.title ?? undefined,
+      description: json.data?.description ?? undefined,
+      image: json.data?.image ?? undefined,
+      siteName: json.data?.siteName ?? undefined,
+    };
+    linkMetaCache.set(url, data);
+    return data;
+  } catch {
+    return {};
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -489,6 +504,139 @@ function extractRedditTitleFromUrl(url: string): string | null {
 }
 
 // ──────────────────────────────────────────────
+// Favicon helper (shared with ThreadPage)
+// ──────────────────────────────────────────────
+function FaviconImg({ hostname }: { hostname: string }) {
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=16`}
+      alt=""
+      aria-hidden="true"
+      style={{ width: 12, height: 12, objectFit: "contain", flexShrink: 0 }}
+      onError={() => setVisible(false)}
+    />
+  );
+}
+
+// ──────────────────────────────────────────────
+// Overlay thumbnail card (image with bottom caption bar)
+// ──────────────────────────────────────────────
+function OverlayMediaCard({
+  image,
+  hostname,
+  siteName,
+  title,
+  description,
+  maxWidth,
+  fallback,
+}: {
+  image?: string;
+  hostname: string;
+  siteName?: string;
+  title?: string;
+  description?: string;
+  maxWidth?: number;
+  fallback: React.ReactNode;
+}) {
+  const label = siteName ?? hostname;
+
+  if (!image) return <>{fallback}</>;
+
+  return (
+    <div
+      style={{
+        maxWidth: maxWidth ?? 320,
+        borderRadius: 10,
+        overflow: "hidden",
+        backgroundColor: "#1a1a1a",
+        border: "1px solid #2a2a2a",
+        position: "relative",
+        aspectRatio: "16 / 9",
+      }}
+    >
+      <img
+        src={image}
+        alt={title ?? hostname}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+        }}
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+      />
+      {/* Bottom caption overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: "6px 8px",
+          background:
+            "linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginBottom: title ? 2 : 0,
+          }}
+        >
+          <FaviconImg hostname={hostname} />
+          <span
+            className="font-mono"
+            style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
+          >
+            {label}
+          </span>
+        </div>
+        {title && (
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 11,
+              color: "#eee",
+              margin: 0,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: 1.3,
+            }}
+          >
+            {title}
+          </p>
+        )}
+        {description && (
+          <p
+            className="font-mono"
+            style={{
+              fontSize: 10,
+              color: "#999",
+              margin: "2px 0 0",
+              display: "-webkit-box",
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: 1.2,
+            }}
+          >
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Reddit Embed
 // ──────────────────────────────────────────────
 interface RedditPostData {
@@ -515,11 +663,9 @@ function RedditEmbed({ url }: { url: string }) {
     thumbnail: null,
     body: null,
   });
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("ready");
 
   useEffect(() => {
     let cancelled = false;
-    // Set slug-derived title immediately so it's visible right away
     const slugTitle = extractRedditTitleFromUrl(url) ?? "Reddit post";
     const subreddit = (() => {
       try {
@@ -530,17 +676,14 @@ function RedditEmbed({ url }: { url: string }) {
       }
     })();
     setPostData({ title: slugTitle, subreddit, thumbnail: null, body: null });
-    setStatus("ready");
 
-    // Try to enrich with OG metadata (image + possibly better title)
-    backendApi
-      .fetchOgMetadata(url)
+    fetchLinkMeta(url)
       .then((meta) => {
         if (!cancelled) {
           setPostData({
             title: meta.title && meta.title.length > 5 ? meta.title : slugTitle,
             subreddit,
-            thumbnail: meta.imageUrl ?? null,
+            thumbnail: meta.image ?? null,
             body: meta.description ?? null,
           });
         }
@@ -554,21 +697,7 @@ function RedditEmbed({ url }: { url: string }) {
     };
   }, [url]);
 
-  if (status === "error") {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-mono text-xs break-all underline"
-        style={{ color: "#4a9e5c" }}
-      >
-        {url}
-      </a>
-    );
-  }
-
-  return (
+  const textCard = (
     <div
       style={{
         maxWidth: 320,
@@ -576,97 +705,86 @@ function RedditEmbed({ url }: { url: string }) {
         backgroundColor: "#1a1a1a",
         border: "1px solid #2a2a2a",
         overflow: "hidden",
+        padding: "10px 12px",
       }}
     >
-      {status === "loading" ? (
-        <div style={{ padding: "10px 12px" }}>
-          <span className="font-mono text-[11px]" style={{ color: "#555" }}>
-            Loading Reddit post…
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 6,
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 20 20"
+          fill="#ff4500"
+          aria-hidden="true"
+          style={{ flexShrink: 0 }}
+        >
+          <circle cx="10" cy="10" r="10" fill="#ff4500" />
+          <path
+            d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
+            fill="white"
+          />
+        </svg>
+        {postData.subreddit && (
+          <span
+            className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              backgroundColor: "#ff450022",
+              color: "#ff6633",
+              border: "1px solid #ff450033",
+            }}
+          >
+            {postData.subreddit}
           </span>
-        </div>
-      ) : postData ? (
-        <>
-          {postData.thumbnail && (
-            <img
-              src={postData.thumbnail}
-              alt="Post thumbnail"
-              style={{
-                width: "100%",
-                height: 120,
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          )}
-          <div style={{ padding: "10px 12px" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 6,
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 20 20"
-                fill="#ff4500"
-                aria-hidden="true"
-                style={{ flexShrink: 0 }}
-              >
-                <circle cx="10" cy="10" r="10" fill="#ff4500" />
-                <path
-                  d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .14-.64l-2.38-.5a.26.26 0 0 0-.31.2l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .57-1.26zM7.27 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.58 2.71a3.58 3.58 0 0 1-2.85.89 3.58 3.58 0 0 1-2.85-.89.23.23 0 0 1 .33-.33 3.15 3.15 0 0 0 2.52.71 3.15 3.15 0 0 0 2.52-.71.23.23 0 0 1 .33.33zm-.16-1.71a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"
-                  fill="white"
-                />
-              </svg>
-              {postData.subreddit && (
-                <span
-                  className="font-mono text-[10px] px-1.5 py-0.5 rounded"
-                  style={{
-                    backgroundColor: "#ff450022",
-                    color: "#ff6633",
-                    border: "1px solid #ff450033",
-                  }}
-                >
-                  {postData.subreddit}
-                </span>
-              )}
-            </div>
-            <p
-              className="font-mono text-xs leading-snug mb-2"
-              style={{ color: "#e0e0e0", fontWeight: 600 }}
-            >
-              {postData.title}
-            </p>
-            {postData.body && (
-              <p
-                className="font-mono text-[11px] leading-relaxed mb-3"
-                style={{ color: "#888" }}
-              >
-                {postData.body}
-                {postData.body.length >= 200 ? "…" : ""}
-              </p>
-            )}
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-[10px] underline"
-              style={{ color: "#ff4500" }}
-            >
-              View on Reddit →
-            </a>
-          </div>
-        </>
-      ) : null}
+        )}
+      </div>
+      <p
+        className="font-mono text-xs leading-snug mb-2"
+        style={{ color: "#e0e0e0", fontWeight: 600 }}
+      >
+        {postData.title}
+      </p>
+      {postData.body && (
+        <p
+          className="font-mono text-[11px] leading-relaxed mb-3"
+          style={{ color: "#888" }}
+        >
+          {postData.body}
+          {postData.body.length >= 200 ? "…" : ""}
+        </p>
+      )}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-[10px] underline"
+        style={{ color: "#ff4500" }}
+      >
+        View on Reddit →
+      </a>
     </div>
+  );
+
+  return (
+    <OverlayMediaCard
+      image={postData.thumbnail ?? undefined}
+      hostname="reddit.com"
+      siteName={postData.subreddit || "Reddit"}
+      title={postData.title}
+      description={postData.body ?? undefined}
+      maxWidth={320}
+      fallback={textCard}
+    />
   );
 }
 
 // ──────────────────────────────────────────────
-// Link Preview Card (iMessage-style)
+// Link Preview Card — 16:9 overlay when image available, iMessage-style otherwise
 // ──────────────────────────────────────────────
 function LinkPreviewCard({
   url,
@@ -675,17 +793,24 @@ function LinkPreviewCard({
   url: string;
   preloadedMeta?: backendApi.OgMetadata;
 }) {
-  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(
-    preloadedMeta ?? null,
-  );
+  // Normalize preloadedMeta (backendApi.OgMetadata) to LinkMetaData shape
+  const preloaded: LinkMetaData | null = preloadedMeta
+    ? {
+        title: preloadedMeta.title,
+        description: preloadedMeta.description,
+        image: preloadedMeta.imageUrl,
+        siteName: preloadedMeta.siteName,
+      }
+    : null;
+
+  const [meta, setMeta] = useState<LinkMetaData | null>(preloaded);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
-    preloadedMeta ? "ready" : "loading",
+    preloaded ? "ready" : "loading",
   );
 
   useEffect(() => {
-    // If preloaded data was provided, use it immediately — no fetch needed
-    if (preloadedMeta) {
-      setMeta(preloadedMeta);
+    if (preloaded) {
+      setMeta(preloaded);
       setStatus("ready");
       return;
     }
@@ -693,25 +818,19 @@ function LinkPreviewCard({
     let cancelled = false;
     setStatus("loading");
 
-    // Check cache first
-    if (ogMetadataCache.has(url)) {
-      const cached = ogMetadataCache.get(url)!;
+    if (linkMetaCache.has(url)) {
+      const cached = linkMetaCache.get(url)!;
       setMeta(cached);
       setStatus("ready");
       return;
     }
 
-    const fetchFn = url.includes("rumble.com")
-      ? backendApi.fetchRumbleOgMetadata
-      : backendApi.fetchOgMetadata;
-
-    withTimeout(fetchFn(url), 10_000)
+    fetchLinkMeta(url)
       .then((data) => {
         if (cancelled) return;
-        ogMetadataCache.set(url, data);
         setMeta(data);
         setStatus(
-          data.title || data.description || data.imageUrl ? "ready" : "error",
+          data.title || data.description || data.image ? "ready" : "error",
         );
       })
       .catch(() => {
@@ -721,7 +840,8 @@ function LinkPreviewCard({
     return () => {
       cancelled = true;
     };
-  }, [url, preloadedMeta]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: preloaded is derived from preloadedMeta; if preloadedMeta is set, we return early above and never hit the fetch path
+  }, [url, preloaded]);
 
   const hostname = (() => {
     try {
@@ -731,10 +851,8 @@ function LinkPreviewCard({
     }
   })();
 
-  // Prefer siteName from metadata, fall back to hostname
   const siteLabel = meta?.siteName ?? hostname;
 
-  // Fallback: just show the URL as a link
   if (status === "error") {
     return (
       <a
@@ -798,7 +916,8 @@ function LinkPreviewCard({
     );
   }
 
-  return (
+  // iMessage-style text card (no image fallback)
+  const iMessageCard = (
     <a
       href={url}
       target="_blank"
@@ -811,54 +930,75 @@ function LinkPreviewCard({
         textDecoration: "none",
       }}
     >
-      {meta?.imageUrl && (
-        <img
-          src={meta.imageUrl}
-          alt={meta.title ?? hostname}
+      <div className="flex flex-col justify-center py-2 px-3 min-w-0 flex-1">
+        {/* Row 1: favicon + site name */}
+        <div
           style={{
-            width: 60,
-            height: 60,
-            objectFit: "cover",
-            flexShrink: 0,
-            display: "block",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginBottom: 4,
           }}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
-      )}
-      <div
-        className="flex flex-col justify-center py-2 px-1 min-w-0 flex-1"
-        style={{ paddingLeft: meta?.imageUrl ? 0 : 12 }}
-      >
+        >
+          <FaviconImg hostname={hostname} />
+          <p
+            className="font-mono text-[10px]"
+            style={{ color: "#555", margin: 0 }}
+          >
+            {siteLabel}
+          </p>
+        </div>
         {meta?.title && (
           <p
             className="font-mono text-[12px] font-bold leading-snug mb-0.5 truncate"
-            style={{ color: "#e0e0e0" }}
+            style={{ color: "#e0e0e0", margin: 0 }}
           >
             {meta.title}
           </p>
         )}
         {meta?.description && (
           <p
-            className="font-mono text-[11px] leading-snug mb-0.5"
+            className="font-mono text-[11px] leading-snug"
             style={{
               color: "#888",
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
+              margin: "2px 0 0",
             }}
           >
             {meta.description}
           </p>
         )}
-        <p className="font-mono text-[10px]" style={{ color: "#555" }}>
-          {siteLabel}
-        </p>
       </div>
     </a>
   );
+
+  // When image is available: 16:9 overlay card
+  if (meta?.image) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block mt-2 transition-opacity hover:opacity-80"
+        style={{ textDecoration: "none", maxWidth: 320 }}
+      >
+        <OverlayMediaCard
+          image={meta.image}
+          hostname={hostname}
+          siteName={meta.siteName}
+          title={meta.title}
+          description={meta.description}
+          maxWidth={320}
+          fallback={iMessageCard}
+        />
+      </a>
+    );
+  }
+
+  return iMessageCard;
 }
 
 // ──────────────────────────────────────────────
@@ -2407,7 +2547,7 @@ function InlineMediaPreview({
 // Mini link preview (for compose bar inline preview)
 // ──────────────────────────────────────────────
 function LinkPreviewMini({ url }: { url: string }) {
-  const [meta, setMeta] = useState<backendApi.OgMetadata | null>(null);
+  const [meta, setMeta] = useState<LinkMetaData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -2416,21 +2556,16 @@ function LinkPreviewMini({ url }: { url: string }) {
     let cancelled = false;
     setStatus("loading");
 
-    if (ogMetadataCache.has(url)) {
-      const cached = ogMetadataCache.get(url)!;
+    if (linkMetaCache.has(url)) {
+      const cached = linkMetaCache.get(url)!;
       setMeta(cached);
       setStatus("ready");
       return;
     }
 
-    const fetchFn = url.includes("rumble.com")
-      ? backendApi.fetchRumbleOgMetadata
-      : backendApi.fetchOgMetadata;
-
-    withTimeout(fetchFn(url), 10_000)
+    fetchLinkMeta(url)
       .then((data) => {
         if (cancelled) return;
-        ogMetadataCache.set(url, data);
         setMeta(data);
         setStatus("ready");
       })
@@ -2460,9 +2595,9 @@ function LinkPreviewMini({ url }: { url: string }) {
         minWidth: 0,
       }}
     >
-      {status === "ready" && meta?.imageUrl && (
+      {status === "ready" && meta?.image && (
         <img
-          src={meta.imageUrl}
+          src={meta.image}
           alt={meta.title ?? hostname}
           style={{
             width: 36,
@@ -3214,21 +3349,24 @@ export default function ThreadPage() {
           : extractFirstLinkPreviewUrl(content.trim());
 
       if (previewUrlCandidate) {
-        // Use cache if available to avoid duplicate backend calls
-        if (ogMetadataCache.has(previewUrlCandidate)) {
-          linkPreview = ogMetadataCache.get(previewUrlCandidate)!;
+        // Use cache if available to avoid duplicate calls
+        if (linkMetaCache.has(previewUrlCandidate)) {
+          const cached = linkMetaCache.get(previewUrlCandidate)!;
+          linkPreview = {
+            imageUrl: cached.image,
+            title: cached.title,
+            description: cached.description,
+            siteName: cached.siteName,
+          };
         } else {
           try {
-            const fetchFn = previewUrlCandidate.includes("rumble.com")
-              ? backendApi.fetchRumbleOgMetadata
-              : backendApi.fetchOgMetadata;
-            linkPreview = await withTimeout(
-              fetchFn(previewUrlCandidate),
-              10_000,
-            );
-            if (linkPreview) {
-              ogMetadataCache.set(previewUrlCandidate, linkPreview);
-            }
+            const data = await fetchLinkMeta(previewUrlCandidate);
+            linkPreview = {
+              imageUrl: data.image,
+              title: data.title,
+              description: data.description,
+              siteName: data.siteName,
+            };
           } catch {
             // Non-blocking — send without preview if fetch fails
             linkPreview = null;
