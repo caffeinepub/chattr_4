@@ -366,29 +366,6 @@ export async function fetchRumbleOgMetadata(url: string): Promise<OgMetadata> {
   }
 }
 
-// ─── Microlink fetch (for Rumble + general URLs) ─────────────────
-// Uses the public Microlink API (no key needed, free tier).
-// Handles CORS and bot-detection automatically from Microlink's servers.
-// Only use for URLs that are NOT YouTube, Twitch, Reddit, or Twitter/X.
-export async function fetchMicrolinkMetadata(url: string): Promise<OgMetadata> {
-  try {
-    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}`;
-    const res = await fetch(apiUrl);
-    if (!res.ok) return {};
-    const json = await res.json();
-    if (json.status !== "success" || !json.data) return {};
-    const d = json.data;
-    return {
-      title: d.title ?? undefined,
-      description: d.description ?? undefined,
-      imageUrl: d.image?.url ?? d.screenshot?.url ?? undefined,
-      siteName: d.publisher ?? d.author ?? undefined,
-    };
-  } catch {
-    return {};
-  }
-}
-
 // ─── Twitch thumbnail (CDN-only, no scraping) ─────────────────
 // Twitch blocks server-side scrapers. We detect the URL type in the
 // frontend and build the CDN thumbnail URL directly -- no backend call needed.

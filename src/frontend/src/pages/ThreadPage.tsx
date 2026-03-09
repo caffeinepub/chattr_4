@@ -214,35 +214,6 @@ function isEmbedUrl(url: string): boolean {
   }
 }
 
-// Returns true if URL should use Microlink for previews (Rumble + all non-YouTube/Twitch/Reddit/Twitter)
-function shouldUseMicrolink(url: string): boolean {
-  try {
-    const { hostname } = new URL(url);
-    const host = hostname.replace(/^www\./, "");
-    // These have their own dedicated embed/preview logic
-    const backendHandled = [
-      "youtube.com",
-      "youtu.be",
-      "twitch.tv",
-      "twitter.com",
-      "x.com",
-      "reddit.com",
-    ];
-    return !backendHandled.includes(host);
-  } catch {
-    return false;
-  }
-}
-
-// Pick the right metadata fetcher for a preview URL
-function getPreviewFetcher(
-  url: string,
-): (u: string) => Promise<backendApi.OgMetadata> {
-  return shouldUseMicrolink(url)
-    ? backendApi.fetchMicrolinkMetadata
-    : backendApi.fetchOgMetadata;
-}
-
 // Extract the first URL from text that is a link-preview candidate (not an embed)
 function extractFirstLinkPreviewUrl(text: string): string | null {
   const match = text.match(/(https?:\/\/[^\s]+)/gi);
@@ -730,9 +701,11 @@ function LinkPreviewCard({
       return;
     }
 
-    const fetchFn = getPreviewFetcher(url);
+    const fetchFn = url.includes("rumble.com")
+      ? backendApi.fetchRumbleOgMetadata
+      : backendApi.fetchOgMetadata;
 
-    withTimeout(fetchFn(url), 15_000)
+    withTimeout(fetchFn(url), 10_000)
       .then((data) => {
         if (cancelled) return;
         ogMetadataCache.set(url, data);
@@ -2450,9 +2423,11 @@ function LinkPreviewMini({ url }: { url: string }) {
       return;
     }
 
-    const fetchFn = getPreviewFetcher(url);
+    const fetchFn = url.includes("rumble.com")
+      ? backendApi.fetchRumbleOgMetadata
+      : backendApi.fetchOgMetadata;
 
-    withTimeout(fetchFn(url), 15_000)
+    withTimeout(fetchFn(url), 10_000)
       .then((data) => {
         if (cancelled) return;
         ogMetadataCache.set(url, data);
@@ -3244,10 +3219,12 @@ export default function ThreadPage() {
           linkPreview = ogMetadataCache.get(previewUrlCandidate)!;
         } else {
           try {
-            const fetchFn = getPreviewFetcher(previewUrlCandidate);
+            const fetchFn = previewUrlCandidate.includes("rumble.com")
+              ? backendApi.fetchRumbleOgMetadata
+              : backendApi.fetchOgMetadata;
             linkPreview = await withTimeout(
               fetchFn(previewUrlCandidate),
-              15_000,
+              10_000,
             );
             if (linkPreview) {
               ogMetadataCache.set(previewUrlCandidate, linkPreview);

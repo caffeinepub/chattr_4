@@ -243,8 +243,9 @@ function RumbleThumbnailCard({ url }: { url: string }) {
     setLoading(true);
     setThumbUrl(null);
 
-    // Use Microlink to fetch Rumble thumbnails — handles CORS and bot detection server-side
-    withTimeout(backendApi.fetchMicrolinkMetadata(url), 15_000)
+    // fetchRumbleOgMetadata uses a browser-like User-Agent to bypass Rumble's bot detection
+    // 10s timeout so the card never hangs forever if the backend outcall stalls
+    withTimeout(backendApi.fetchRumbleOgMetadata(url), 10_000)
       .then((meta) => {
         if (!cancelled) {
           setThumbUrl(meta.imageUrl ?? null);
@@ -502,8 +503,7 @@ function LinkThumbnailCard({ url }: { url: string }) {
       return;
     }
 
-    // Use Microlink for all general link thumbnails (handles CORS + bot detection)
-    withTimeout(backendApi.fetchMicrolinkMetadata(url), 15_000)
+    withTimeout(backendApi.fetchOgMetadata(url), 10_000)
       .then((data) => {
         if (!cancelled) {
           catalogOgCache.set(url, data);
@@ -1494,7 +1494,7 @@ export default function CatalogPage() {
     setLinkOgLoading(true);
     setLinkOgMeta(null);
     try {
-      const data = await backendApi.fetchMicrolinkMetadata(url);
+      const data = await backendApi.fetchOgMetadata(url);
       catalogOgCache.set(url, data);
       setLinkOgMeta(data);
     } catch {
@@ -1508,8 +1508,7 @@ export default function CatalogPage() {
     setRumbleOgLoading(true);
     setRumbleOgMeta(null);
     try {
-      // Use Microlink — handles CORS and Rumble's bot detection
-      const data = await backendApi.fetchMicrolinkMetadata(url);
+      const data = await backendApi.fetchRumbleOgMetadata(url);
       setRumbleOgMeta(data);
     } catch {
       setRumbleOgMeta({});
@@ -1621,12 +1620,12 @@ export default function CatalogPage() {
         thumbnailUrl = newMediaUrl.trim();
         thumbnailType = newMediaType;
 
-        // For Rumble, resolve the real og:image thumbnail URL via Microlink so room cards display it
+        // For Rumble, resolve the real og:image thumbnail URL so room cards display it
         if (newMediaType === "rumble") {
           try {
             const ogData =
-              (rumbleOgMeta?.imageUrl ? rumbleOgMeta : null) ??
-              (await backendApi.fetchMicrolinkMetadata(thumbnailUrl));
+              rumbleOgMeta ??
+              (await backendApi.fetchRumbleOgMetadata(thumbnailUrl));
             if (ogData.imageUrl) {
               thumbnailUrl = ogData.imageUrl;
               thumbnailType = "image";
