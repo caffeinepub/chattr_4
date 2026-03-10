@@ -3570,27 +3570,6 @@ export default function ThreadPage() {
             </span>
           )}
 
-          {/* Live indicator */}
-          <div className="flex items-center gap-1 shrink-0 ml-auto">
-            <span
-              className={live ? "animate-pulse" : ""}
-              style={{
-                display: "inline-block",
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                backgroundColor: live ? "#2563eb" : "#9ca3af",
-                boxShadow: live ? "0 0 5px #2563eb" : "none",
-              }}
-            />
-            <span
-              className="font-mono text-[11px] uppercase tracking-wider"
-              style={{ color: live ? "#2563eb" : "#9ca3af" }}
-            >
-              {live ? "LIVE" : "OFFLINE"}
-            </span>
-          </div>
-
           {/* Stats */}
           {Number(thread.postCount) > 0 && (
             <span
@@ -3612,6 +3591,27 @@ export default function ThreadPage() {
               {Number(thread.viewCount)}
             </span>
           )}
+
+          {/* Live indicator */}
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
+            <span
+              className={live ? "animate-pulse" : ""}
+              style={{
+                display: "inline-block",
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                backgroundColor: live ? "#2563eb" : "#9ca3af",
+                boxShadow: live ? "0 0 5px #2563eb" : "none",
+              }}
+            />
+            <span
+              className="font-mono text-[11px] uppercase tracking-wider"
+              style={{ color: live ? "#2563eb" : "#9ca3af" }}
+            >
+              {live ? "LIVE" : "OFFLINE"}
+            </span>
+          </div>
         </div>
       </div>
 
