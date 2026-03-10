@@ -48,7 +48,7 @@ export default function SettingsModal({
   const [showGifPicker, setShowGifPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultAvatar = generatePixelAvatar(sessionId, 72);
+  const defaultAvatar = generatePixelAvatar(sessionId, 86);
 
   function validateUsername(val: string): string {
     if (!val.trim()) return "Username is required";
@@ -172,9 +172,9 @@ export default function SettingsModal({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         style={{
-          backgroundColor: "#111111",
-          border: "1px solid #2a2a2a",
-          color: "#e0e0e0",
+          backgroundColor: "#f8f9fa",
+          border: "1px solid #e5e7eb",
+          color: "#111827",
           maxWidth: 440,
           maxHeight: "85vh",
           overflowY: "auto",
@@ -184,7 +184,7 @@ export default function SettingsModal({
         <DialogHeader>
           <DialogTitle
             className="font-mono"
-            style={{ color: "#4a9e5c", fontSize: 14 }}
+            style={{ color: "#2563eb", fontSize: 14 }}
           >
             Settings
           </DialogTitle>
@@ -194,8 +194,8 @@ export default function SettingsModal({
           <TabsList
             className="font-mono text-xs w-full"
             style={{
-              backgroundColor: "#0d0d0d",
-              border: "1px solid #2a2a2a",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
               marginBottom: 16,
             }}
           >
@@ -220,16 +220,16 @@ export default function SettingsModal({
             <div className="space-y-5 pb-4">
               {/* Avatar section */}
               <div className="flex flex-col items-center gap-2">
-                <div className="relative" style={{ width: 72, height: 72 }}>
+                <div className="relative" style={{ width: 86, height: 86 }}>
                   <img
                     src={avatarPreview ?? defaultAvatar}
                     alt="Your avatar"
                     style={{
-                      width: 72,
-                      height: 72,
+                      width: 86,
+                      height: 86,
                       borderRadius: "50%",
                       objectFit: "cover",
-                      border: "2px solid #2a2a2a",
+                      border: "2px solid #e5e7eb",
                     }}
                   />
                   {avatarPreview && (
@@ -257,7 +257,7 @@ export default function SettingsModal({
                       fileInputRef.current?.click();
                     }}
                     className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
-                    style={{ color: "#555" }}
+                    style={{ color: "#9ca3af" }}
                     data-ocid="settings.avatar_upload_button"
                   >
                     <ImagePlus size={11} />
@@ -265,7 +265,7 @@ export default function SettingsModal({
                   </button>
                   <span
                     className="font-mono text-[10px]"
-                    style={{ color: "#2a2a2a" }}
+                    style={{ color: "#e5e7eb" }}
                   >
                     |
                   </span>
@@ -273,7 +273,7 @@ export default function SettingsModal({
                     type="button"
                     onClick={() => setShowGifPicker((v) => !v)}
                     className="font-mono text-[10px] uppercase tracking-wider transition-colors"
-                    style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
+                    style={{ color: showGifPicker ? "#ff6b9d" : "#9ca3af" }}
                     data-ocid="settings.gif_avatar_button"
                   >
                     🎞 GIF
@@ -309,7 +309,7 @@ export default function SettingsModal({
                 <label
                   htmlFor="settings-username"
                   className="font-mono text-xs uppercase tracking-wider"
-                  style={{ color: "#888" }}
+                  style={{ color: "#6b7280" }}
                 >
                   Username
                 </label>
@@ -332,15 +332,17 @@ export default function SettingsModal({
                     spellCheck={false}
                     className="font-mono text-sm pr-14"
                     style={{
-                      backgroundColor: "#0d0d0d",
-                      border: `1px solid ${usernameError ? "#c0392b" : "#2a2a2a"}`,
-                      color: "#e0e0e0",
+                      backgroundColor: "#ffffff",
+                      border: `1px solid ${usernameError ? "#c0392b" : "#e5e7eb"}`,
+                      color: "#111827",
                     }}
                     data-ocid="settings.username_input"
                   />
                   <span
                     className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px]"
-                    style={{ color: username.length > 18 ? "#c0392b" : "#444" }}
+                    style={{
+                      color: username.length > 18 ? "#c0392b" : "#9ca3af",
+                    }}
                   >
                     {username.length}/20
                   </span>
@@ -349,7 +351,7 @@ export default function SettingsModal({
                 {(usernameError || checkingUsername) && (
                   <p
                     className="font-mono text-[11px] flex items-center gap-1"
-                    style={{ color: usernameError ? "#c0392b" : "#888" }}
+                    style={{ color: usernameError ? "#c0392b" : "#6b7280" }}
                   >
                     {checkingUsername ? (
                       <>
@@ -368,7 +370,7 @@ export default function SettingsModal({
                   variant="ghost"
                   onClick={onClose}
                   className="font-mono text-xs flex-1"
-                  style={{ color: "#888" }}
+                  style={{ color: "#6b7280" }}
                   data-ocid="settings.close_button"
                   disabled={saving}
                 >
@@ -379,9 +381,9 @@ export default function SettingsModal({
                   disabled={!canSave}
                   className="font-mono text-xs uppercase tracking-wider flex-1"
                   style={{
-                    backgroundColor: canSave ? "#4a9e5c" : "#1a1a1a",
-                    color: canSave ? "#0d0d0d" : "#444",
-                    border: canSave ? "none" : "1px solid #2a2a2a",
+                    backgroundColor: canSave ? "#2563eb" : "#f3f4f6",
+                    color: canSave ? "#ffffff" : "#9ca3af",
+                    border: canSave ? "none" : "1px solid #e5e7eb",
                   }}
                   data-ocid="settings.save_button"
                 >

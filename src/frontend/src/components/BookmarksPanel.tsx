@@ -74,7 +74,7 @@ export default function BookmarksPanel({
         className="flex items-center justify-center py-8"
         data-ocid="bookmarks.loading_state"
       >
-        <span className="font-mono text-xs" style={{ color: "#444" }}>
+        <span className="font-mono text-xs" style={{ color: "#9ca3af" }}>
           Loading bookmarks…
         </span>
       </div>
@@ -84,10 +84,10 @@ export default function BookmarksPanel({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-3">
-        <Bookmark size={14} style={{ color: "#4a9e5c" }} />
+        <Bookmark size={14} style={{ color: "#2563eb" }} />
         <span
           className="font-mono text-sm font-bold"
-          style={{ color: "#e0e0e0" }}
+          style={{ color: "#111827" }}
         >
           Bookmarks
         </span>
@@ -96,7 +96,7 @@ export default function BookmarksPanel({
       <Tabs defaultValue="threads">
         <TabsList
           className="font-mono text-xs w-full"
-          style={{ backgroundColor: "#0d0d0d", border: "1px solid #2a2a2a" }}
+          style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb" }}
         >
           <TabsTrigger
             value="threads"
@@ -118,7 +118,7 @@ export default function BookmarksPanel({
           {threadBookmarks.length === 0 ? (
             <p
               className="font-mono text-xs text-center py-6"
-              style={{ color: "#444" }}
+              style={{ color: "#9ca3af" }}
               data-ocid="bookmarks.threads.empty_state"
             >
               No bookmarked chats yet.
@@ -134,21 +134,21 @@ export default function BookmarksPanel({
                     key={String(bm.id)}
                     className="flex items-start gap-2 rounded-lg p-2.5"
                     style={{
-                      backgroundColor: "#0d0d0d",
-                      border: "1px solid #2a2a2a",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #e5e7eb",
                     }}
                     data-ocid={`bookmarks.thread.item.${i + 1}`}
                   >
                     <div className="flex-1 min-w-0">
                       <p
                         className="font-mono text-xs font-medium truncate"
-                        style={{ color: "#e0e0e0" }}
+                        style={{ color: "#111827" }}
                       >
                         {thread?.title ?? `Chat #${String(bm.targetId)}`}
                       </p>
                       <p
                         className="font-mono text-[10px] mt-0.5"
-                        style={{ color: "#555" }}
+                        style={{ color: "#9ca3af" }}
                       >
                         Saved {timeAgo(backendApi.nsToMs(bm.createdAt))}
                       </p>
@@ -162,8 +162,8 @@ export default function BookmarksPanel({
                         });
                         onClose();
                       }}
-                      className="p-1 rounded transition-colors hover:bg-white/5"
-                      style={{ color: "#4a9e5c" }}
+                      className="p-1 rounded transition-colors hover:bg-black/5"
+                      style={{ color: "#2563eb" }}
                       aria-label="Open chat"
                       data-ocid={`bookmarks.thread.open_button.${i + 1}`}
                     >
@@ -172,8 +172,8 @@ export default function BookmarksPanel({
                     <button
                       type="button"
                       onClick={() => handleRemove(bm.id)}
-                      className="p-1 rounded transition-colors hover:bg-white/5"
-                      style={{ color: "#555" }}
+                      className="p-1 rounded transition-colors hover:bg-black/5"
+                      style={{ color: "#9ca3af" }}
                       aria-label="Remove bookmark"
                       data-ocid={`bookmarks.thread.delete_button.${i + 1}`}
                     >
@@ -190,7 +190,7 @@ export default function BookmarksPanel({
           {messageBookmarks.length === 0 ? (
             <p
               className="font-mono text-xs text-center py-6"
-              style={{ color: "#444" }}
+              style={{ color: "#9ca3af" }}
               data-ocid="bookmarks.messages.empty_state"
             >
               No bookmarked messages yet.
@@ -206,19 +206,19 @@ export default function BookmarksPanel({
                     key={String(bm.id)}
                     className="flex items-start gap-2 rounded-lg p-2.5"
                     style={{
-                      backgroundColor: "#0d0d0d",
-                      border: "1px solid #2a2a2a",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #e5e7eb",
                     }}
                     data-ocid={`bookmarks.message.item.${i + 1}`}
                   >
                     <MessageSquare
                       size={12}
-                      style={{ color: "#555", flexShrink: 0, marginTop: 2 }}
+                      style={{ color: "#9ca3af", flexShrink: 0, marginTop: 2 }}
                     />
                     <div className="flex-1 min-w-0">
                       <p
                         className="font-mono text-[11px] line-clamp-2"
-                        style={{ color: "#bbb" }}
+                        style={{ color: "#374151" }}
                       >
                         {post?.content
                           ? post.content.slice(0, 120)
@@ -226,7 +226,7 @@ export default function BookmarksPanel({
                       </p>
                       <p
                         className="font-mono text-[10px] mt-0.5"
-                        style={{ color: "#555" }}
+                        style={{ color: "#9ca3af" }}
                       >
                         Saved {timeAgo(backendApi.nsToMs(bm.createdAt))}
                       </p>
@@ -241,8 +241,8 @@ export default function BookmarksPanel({
                           });
                           onClose();
                         }}
-                        className="p-1 rounded transition-colors hover:bg-white/5"
-                        style={{ color: "#4a9e5c" }}
+                        className="p-1 rounded transition-colors hover:bg-black/5"
+                        style={{ color: "#2563eb" }}
                         aria-label="Open message in chat"
                         data-ocid={`bookmarks.message.open_button.${i + 1}`}
                       >
@@ -252,8 +252,8 @@ export default function BookmarksPanel({
                     <button
                       type="button"
                       onClick={() => handleRemove(bm.id)}
-                      className="p-1 rounded transition-colors hover:bg-white/5"
-                      style={{ color: "#555" }}
+                      className="p-1 rounded transition-colors hover:bg-black/5"
+                      style={{ color: "#9ca3af" }}
                       aria-label="Remove bookmark"
                       data-ocid={`bookmarks.message.delete_button.${i + 1}`}
                     >

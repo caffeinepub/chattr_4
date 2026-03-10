@@ -258,7 +258,7 @@ function renderMentions(
       const mentioned = text.slice(1);
       if (myUsername && mentioned.toLowerCase() === myUsername.toLowerCase()) {
         return (
-          <span key={uid} style={{ color: "#4a9e5c", fontWeight: 600 }}>
+          <span key={uid} style={{ color: "#2563eb", fontWeight: 600 }}>
             {text}
           </span>
         );
@@ -295,7 +295,7 @@ function ImageLightbox({
     // biome-ignore lint/a11y/useKeyWithClickEvents: backdrop click to close
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
       onClick={onClose}
       data-ocid="thread.lightbox"
     >
@@ -306,7 +306,7 @@ function ImageLightbox({
           onClose();
         }}
         className="absolute top-4 right-4 p-2 rounded-full transition-colors"
-        style={{ backgroundColor: "rgba(255,255,255,0.1)", color: "#fff" }}
+        style={{ backgroundColor: "rgba(0,0,0,0.06)", color: "#fff" }}
         aria-label="Close image"
         data-ocid="thread.lightbox_close_button"
       >
@@ -460,7 +460,7 @@ function TwitterEmbed({ url }: { url: string }) {
         target="_blank"
         rel="noopener noreferrer"
         className="font-mono text-xs break-all underline"
-        style={{ color: "#4a9e5c" }}
+        style={{ color: "#2563eb" }}
       >
         {url}
       </a>
@@ -474,11 +474,11 @@ function TwitterEmbed({ url }: { url: string }) {
           style={{
             padding: "10px 12px",
             borderRadius: 8,
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #2a2a2a",
+            backgroundColor: "#f3f4f6",
+            border: "1px solid #e5e7eb",
           }}
         >
-          <span className="font-mono text-[11px]" style={{ color: "#555" }}>
+          <span className="font-mono text-[11px]" style={{ color: "#9ca3af" }}>
             Loading tweet…
           </span>
         </div>
@@ -560,8 +560,8 @@ function OverlayMediaCard({
         maxWidth: maxWidth ?? 320,
         borderRadius: 10,
         overflow: "hidden",
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         position: "relative",
         aspectRatio: "16 / 9",
       }}
@@ -602,7 +602,7 @@ function OverlayMediaCard({
           <FaviconImg hostname={hostname} />
           <span
             className="font-mono"
-            style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
+            style={{ fontSize: 10, color: "#4b5563", lineHeight: 1.2 }}
           >
             {label}
           </span>
@@ -612,7 +612,7 @@ function OverlayMediaCard({
             className="font-mono"
             style={{
               fontSize: 11,
-              color: "#eee",
+              color: "#111827",
               margin: 0,
               display: "-webkit-box",
               WebkitLineClamp: 2,
@@ -629,7 +629,7 @@ function OverlayMediaCard({
             className="font-mono"
             style={{
               fontSize: 10,
-              color: "#999",
+              color: "#6b7280",
               margin: "2px 0 0",
               display: "-webkit-box",
               WebkitLineClamp: 1,
@@ -712,8 +712,8 @@ function RedditEmbed({ url }: { url: string }) {
       style={{
         maxWidth: 320,
         borderRadius: 10,
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         overflow: "hidden",
         padding: "10px 12px",
       }}
@@ -755,14 +755,14 @@ function RedditEmbed({ url }: { url: string }) {
       </div>
       <p
         className="font-mono text-xs leading-snug mb-2"
-        style={{ color: "#e0e0e0", fontWeight: 600 }}
+        style={{ color: "#111827", fontWeight: 600 }}
       >
         {postData.title}
       </p>
       {postData.body && (
         <p
           className="font-mono text-[11px] leading-relaxed mb-3"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           {postData.body}
           {postData.body.length >= 200 ? "…" : ""}
@@ -870,7 +870,7 @@ function LinkPreviewCard({
         target="_blank"
         rel="noopener noreferrer"
         className="block mt-2 font-mono text-xs break-all underline"
-        style={{ color: "#4a9e5c" }}
+        style={{ color: "#2563eb" }}
       >
         {url}
       </a>
@@ -882,8 +882,8 @@ function LinkPreviewCard({
       <div
         className="flex items-center gap-2 mt-2 rounded-xl px-3 py-2"
         style={{
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
+          backgroundColor: "#f3f4f6",
+          border: "1px solid #e5e7eb",
           maxWidth: 320,
         }}
       >
@@ -892,7 +892,7 @@ function LinkPreviewCard({
             width: 60,
             height: 60,
             borderRadius: 8,
-            backgroundColor: "#2a2a2a",
+            backgroundColor: "#e5e7eb",
             flexShrink: 0,
           }}
         />
@@ -901,7 +901,7 @@ function LinkPreviewCard({
             style={{
               height: 10,
               borderRadius: 4,
-              backgroundColor: "#2a2a2a",
+              backgroundColor: "#e5e7eb",
               width: "70%",
             }}
           />
@@ -909,7 +909,7 @@ function LinkPreviewCard({
             style={{
               height: 8,
               borderRadius: 4,
-              backgroundColor: "#222",
+              backgroundColor: "#e8eaed",
               width: "90%",
             }}
           />
@@ -917,7 +917,7 @@ function LinkPreviewCard({
             style={{
               height: 8,
               borderRadius: 4,
-              backgroundColor: "#1e1e1e",
+              backgroundColor: "#f0f2f5",
               width: "50%",
             }}
           />
@@ -934,8 +934,8 @@ function LinkPreviewCard({
       rel="noopener noreferrer"
       className="flex items-center gap-2.5 mt-2 rounded-xl overflow-hidden transition-opacity hover:opacity-80"
       style={{
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         maxWidth: 320,
         textDecoration: "none",
       }}
@@ -953,7 +953,7 @@ function LinkPreviewCard({
           <FaviconImg hostname={hostname} />
           <p
             className="font-mono text-[10px]"
-            style={{ color: "#555", margin: 0 }}
+            style={{ color: "#9ca3af", margin: 0 }}
           >
             {siteLabel}
           </p>
@@ -961,7 +961,7 @@ function LinkPreviewCard({
         {meta?.title && (
           <p
             className="font-mono text-[12px] font-bold leading-snug mb-0.5 truncate"
-            style={{ color: "#e0e0e0", margin: 0 }}
+            style={{ color: "#111827", margin: 0 }}
           >
             {meta.title}
           </p>
@@ -970,7 +970,7 @@ function LinkPreviewCard({
           <p
             className="font-mono text-[11px] leading-snug"
             style={{
-              color: "#888",
+              color: "#6b7280",
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
@@ -1074,7 +1074,7 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
     image: {
       icon: <Image size={11} />,
       label: "Image",
-      color: "#4a9e5c",
+      color: "#2563eb",
     },
     video: {
       icon: <Video size={11} />,
@@ -1084,7 +1084,7 @@ function MediaTypeChip({ mediaType }: { mediaType: MediaType }) {
     link: {
       icon: <Link2 size={11} />,
       label: "Link",
-      color: "#888",
+      color: "#6b7280",
     },
   };
 
@@ -1160,7 +1160,7 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
           target="_blank"
           rel="noopener noreferrer"
           className="font-mono text-xs break-all"
-          style={{ color: "#4a9e5c" }}
+          style={{ color: "#2563eb" }}
         >
           {url}
         </a>
@@ -1236,7 +1236,7 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
           target="_blank"
           rel="noopener noreferrer"
           className="font-mono text-xs break-all underline"
-          style={{ color: "#4a9e5c" }}
+          style={{ color: "#2563eb" }}
         >
           {url}
         </a>
@@ -1274,7 +1274,7 @@ function MediaEmbed({ url, mediaType }: { url: string; mediaType: MediaType }) {
         target="_blank"
         rel="noopener noreferrer"
         className="font-mono text-xs break-all underline"
-        style={{ color: "#4a9e5c" }}
+        style={{ color: "#2563eb" }}
       >
         {url}
       </a>
@@ -1345,10 +1345,10 @@ function CollapsibleMedia({
         onClick={() => setExpanded((v) => !v)}
         className="flex items-center gap-2 rounded px-2.5 py-1.5 transition-colors w-full text-left"
         style={{
-          backgroundColor: isOwn ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.05)",
+          backgroundColor: isOwn ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.03)",
           border: isOwn
-            ? "1px solid rgba(74,158,92,0.25)"
-            : "1px solid rgba(255,255,255,0.08)",
+            ? "1px solid rgba(37,99,235,0.3)"
+            : "1px solid rgba(0,0,0,0.08)",
           maxWidth: 300,
         }}
         data-ocid={`thread.media_expand_button.${index}`}
@@ -1357,11 +1357,11 @@ function CollapsibleMedia({
         <MediaTypeChip mediaType={mediaType} />
         <span
           className="font-mono text-[10px] flex-1 truncate"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           {truncateUrl(url)}
         </span>
-        <span style={{ color: "#666", flexShrink: 0 }}>
+        <span style={{ color: "#6b7280", flexShrink: 0 }}>
           {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
         </span>
       </button>
@@ -1448,11 +1448,11 @@ function ReactionRow({
             onClick={() => toggleReaction(emoji)}
             className="inline-flex items-center gap-0.5 font-mono text-[11px] px-1.5 py-0.5 rounded-full transition-all"
             style={{
-              backgroundColor: mine ? "#4a9e5c28" : "rgba(255,255,255,0.06)",
+              backgroundColor: mine ? "#2563eb28" : "rgba(0,0,0,0.04)",
               border: mine
-                ? "1px solid #4a9e5c66"
-                : "1px solid rgba(255,255,255,0.1)",
-              color: mine ? "#6abd7c" : "#aaa",
+                ? "1px solid #2563eb66"
+                : "1px solid rgba(0,0,0,0.06)",
+              color: mine ? "#93c5fd" : "#4b5563",
               lineHeight: 1,
             }}
             title={mine ? "Remove reaction" : "Add reaction"}
@@ -1501,9 +1501,9 @@ function ReportModal({ open, onClose }: ReportModalProps) {
     >
       <DialogContent
         style={{
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
-          color: "#e0e0e0",
+          backgroundColor: "#f3f4f6",
+          border: "1px solid #e5e7eb",
+          color: "#111827",
           maxWidth: 400,
         }}
         data-ocid="report.dialog"
@@ -1511,14 +1511,14 @@ function ReportModal({ open, onClose }: ReportModalProps) {
         <DialogHeader>
           <DialogTitle
             className="font-mono text-sm"
-            style={{ color: "#e0e0e0" }}
+            style={{ color: "#111827" }}
           >
             Report message
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-2 py-2">
-          <p className="font-mono text-xs mb-3" style={{ color: "#888" }}>
+          <p className="font-mono text-xs mb-3" style={{ color: "#6b7280" }}>
             Select a reason for reporting this message:
           </p>
           {REPORT_REASONS.map((reason, i) => {
@@ -1530,9 +1530,9 @@ function ReportModal({ open, onClose }: ReportModalProps) {
                 onClick={() => setSelectedReason(reason)}
                 className="w-full text-left px-3 py-2.5 rounded-xl font-mono text-sm transition-all"
                 style={{
-                  backgroundColor: isSelected ? "#4a9e5c18" : "#111",
-                  border: `1px solid ${isSelected ? "#4a9e5c" : "#2a2a2a"}`,
-                  color: isSelected ? "#6abd7c" : "#ccc",
+                  backgroundColor: isSelected ? "#2563eb18" : "#f3f4f6",
+                  border: `1px solid ${isSelected ? "#2563eb" : "#e5e7eb"}`,
+                  color: isSelected ? "#93c5fd" : "#374151",
                 }}
                 data-ocid={`report.reason.radio.${i + 1}`}
               >
@@ -1542,8 +1542,8 @@ function ReportModal({ open, onClose }: ReportModalProps) {
                       width: 14,
                       height: 14,
                       borderRadius: "50%",
-                      border: `2px solid ${isSelected ? "#4a9e5c" : "#444"}`,
-                      backgroundColor: isSelected ? "#4a9e5c" : "transparent",
+                      border: `2px solid ${isSelected ? "#2563eb" : "#9ca3af"}`,
+                      backgroundColor: isSelected ? "#2563eb" : "transparent",
                       flexShrink: 0,
                       display: "flex",
                       alignItems: "center",
@@ -1573,7 +1573,7 @@ function ReportModal({ open, onClose }: ReportModalProps) {
             variant="ghost"
             onClick={handleClose}
             className="font-mono text-xs"
-            style={{ color: "#888", border: "1px solid #2a2a2a" }}
+            style={{ color: "#6b7280", border: "1px solid #e5e7eb" }}
             data-ocid="report.cancel_button"
           >
             Cancel
@@ -1583,8 +1583,8 @@ function ReportModal({ open, onClose }: ReportModalProps) {
             disabled={!selectedReason}
             className="font-mono text-xs disabled:opacity-40"
             style={{
-              backgroundColor: selectedReason ? "#4a9e5c" : "#1a1a1a",
-              color: selectedReason ? "#fff" : "#555",
+              backgroundColor: selectedReason ? "#2563eb" : "#f3f4f6",
+              color: selectedReason ? "#fff" : "#9ca3af",
               border: "none",
             }}
             data-ocid="report.submit_button"
@@ -1652,9 +1652,9 @@ function ReportChatModal({
     >
       <DialogContent
         style={{
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
-          color: "#e0e0e0",
+          backgroundColor: "#f3f4f6",
+          border: "1px solid #e5e7eb",
+          color: "#111827",
           maxWidth: 400,
         }}
         data-ocid="report_chat.dialog"
@@ -1662,14 +1662,14 @@ function ReportChatModal({
         <DialogHeader>
           <DialogTitle
             className="font-mono text-sm"
-            style={{ color: "#e0e0e0" }}
+            style={{ color: "#111827" }}
           >
             Report this chat
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-2 py-2">
-          <p className="font-mono text-xs mb-3" style={{ color: "#888" }}>
+          <p className="font-mono text-xs mb-3" style={{ color: "#6b7280" }}>
             Select a reason for reporting this chat:
           </p>
           {REPORT_REASONS.map((reason, i) => {
@@ -1681,9 +1681,9 @@ function ReportChatModal({
                 onClick={() => setSelectedReason(reason)}
                 className="w-full text-left px-3 py-2.5 rounded-xl font-mono text-sm transition-all"
                 style={{
-                  backgroundColor: isSelected ? "#4a9e5c18" : "#111",
-                  border: `1px solid ${isSelected ? "#4a9e5c" : "#2a2a2a"}`,
-                  color: isSelected ? "#6abd7c" : "#ccc",
+                  backgroundColor: isSelected ? "#2563eb18" : "#f3f4f6",
+                  border: `1px solid ${isSelected ? "#2563eb" : "#e5e7eb"}`,
+                  color: isSelected ? "#93c5fd" : "#374151",
                 }}
                 data-ocid={`report_chat.reason.radio.${i + 1}`}
               >
@@ -1693,8 +1693,8 @@ function ReportChatModal({
                       width: 14,
                       height: 14,
                       borderRadius: "50%",
-                      border: `2px solid ${isSelected ? "#4a9e5c" : "#444"}`,
-                      backgroundColor: isSelected ? "#4a9e5c" : "transparent",
+                      border: `2px solid ${isSelected ? "#2563eb" : "#9ca3af"}`,
+                      backgroundColor: isSelected ? "#2563eb" : "transparent",
                       flexShrink: 0,
                       display: "flex",
                       alignItems: "center",
@@ -1724,7 +1724,7 @@ function ReportChatModal({
             variant="ghost"
             onClick={handleClose}
             className="font-mono text-xs"
-            style={{ color: "#888", border: "1px solid #2a2a2a" }}
+            style={{ color: "#6b7280", border: "1px solid #e5e7eb" }}
             data-ocid="report_chat.cancel_button"
           >
             Cancel
@@ -1734,8 +1734,8 @@ function ReportChatModal({
             disabled={!selectedReason || submitting}
             className="font-mono text-xs disabled:opacity-40"
             style={{
-              backgroundColor: selectedReason ? "#4a9e5c" : "#1a1a1a",
-              color: selectedReason ? "#fff" : "#555",
+              backgroundColor: selectedReason ? "#2563eb" : "#f3f4f6",
+              color: selectedReason ? "#fff" : "#9ca3af",
               border: "none",
             }}
             data-ocid="report_chat.submit_button"
@@ -1901,8 +1901,8 @@ function MessageContextMenu({
         style={{
           left: pos.x,
           top: pos.y,
-          backgroundColor: "#1e1e1e",
-          border: "1px solid #2a2a2a",
+          backgroundColor: "#f0f2f5",
+          border: "1px solid #e5e7eb",
           minWidth: 160,
           boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
         }}
@@ -1911,17 +1911,17 @@ function MessageContextMenu({
         {confirmDelete ? (
           /* Delete confirmation state */
           <div className="px-3.5 py-3 flex flex-col gap-2.5">
-            <p className="font-mono text-xs" style={{ color: "#ccc" }}>
+            <p className="font-mono text-xs" style={{ color: "#374151" }}>
               Delete this message?
             </p>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmDelete(false)}
-                className="flex-1 px-2.5 py-1.5 rounded-lg font-mono text-xs transition-colors hover:bg-white/5"
+                className="flex-1 px-2.5 py-1.5 rounded-lg font-mono text-xs transition-colors hover:bg-black/5"
                 style={{
-                  color: "#888",
-                  border: "1px solid #2a2a2a",
+                  color: "#6b7280",
+                  border: "1px solid #e5e7eb",
                 }}
                 data-ocid="thread.delete_cancel_button"
               >
@@ -1948,11 +1948,11 @@ function MessageContextMenu({
               type="button"
               key={item.label}
               onClick={item.onClick}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 font-mono text-xs text-left transition-colors hover:bg-white/5"
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 font-mono text-xs text-left transition-colors hover:bg-black/5"
               style={{
-                color: item.danger ? "#e05555" : "#ccc",
+                color: item.danger ? "#e05555" : "#374151",
                 borderBottom:
-                  i < menuItems.length - 1 ? "1px solid #2a2a2a" : "none",
+                  i < menuItems.length - 1 ? "1px solid #e5e7eb" : "none",
               }}
             >
               <span style={{ color: item.danger ? "#e05555" : "#666" }}>
@@ -2138,7 +2138,7 @@ function ChatBubble({
       >
         <span
           className="font-mono text-xs italic px-3 py-1.5"
-          style={{ color: "#444" }}
+          style={{ color: "#9ca3af" }}
         >
           [deleted]
         </span>
@@ -2188,12 +2188,12 @@ function ChatBubble({
         className="inline-flex items-center justify-center w-7 h-7 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{
           backgroundColor: showReactionPicker
-            ? "#4a9e5c28"
+            ? "#2563eb28"
             : "rgba(255,255,255,0.04)",
           border: showReactionPicker
-            ? "1px solid #4a9e5c66"
-            : "1px solid rgba(255,255,255,0.08)",
-          color: showReactionPicker ? "#6abd7c" : "#666",
+            ? "1px solid #2563eb66"
+            : "1px solid rgba(0,0,0,0.08)",
+          color: showReactionPicker ? "#93c5fd" : "#666",
         }}
         title="Add reaction"
         data-ocid="thread.reaction_picker_button"
@@ -2205,8 +2205,8 @@ function ChatBubble({
         <div
           className="absolute z-30 flex flex-col py-1 rounded-xl shadow-lg overflow-y-auto"
           style={{
-            backgroundColor: "#1e1e1e",
-            border: "1px solid #2a2a2a",
+            backgroundColor: "#f0f2f5",
+            border: "1px solid #e5e7eb",
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             ...(dropdownOpenUpward
               ? { bottom: "calc(100% + 6px)" }
@@ -2256,10 +2256,10 @@ function ChatBubble({
                   }
                   onReactionChange();
                 }}
-                className="flex items-center justify-center px-3 py-2 transition-all hover:bg-white/10"
+                className="flex items-center justify-center px-3 py-2 transition-all hover:bg-black/8"
                 style={{
-                  color: isActive ? "#6abd7c" : "#ccc",
-                  backgroundColor: isActive ? "#4a9e5c10" : "transparent",
+                  color: isActive ? "#93c5fd" : "#374151",
+                  backgroundColor: isActive ? "#2563eb10" : "transparent",
                 }}
                 title={REACTION_LABELS[emoji] ?? emoji}
               >
@@ -2301,23 +2301,23 @@ function ChatBubble({
           style={
             isOwn
               ? {
-                  backgroundColor: "#1a4d26",
+                  backgroundColor: "#2563eb",
                   borderTopRightRadius: 4,
                   borderBottomRightRadius: 16,
-                  border: "1px solid #2d6b3a",
+                  border: "1px solid #1d4ed8",
                 }
               : {
-                  backgroundColor: "#1e1e1e",
+                  backgroundColor: "#f0f2f5",
                   borderTopLeftRadius: 4,
                   borderBottomLeftRadius: 16,
-                  border: "1px solid #2a2a2a",
+                  border: "1px solid #e5e7eb",
                 }
           }
         >
           {/* Author label */}
           <div
-            className={`font-mono text-[10px] font-bold mb-0.5 flex items-center gap-1 flex-wrap ${isOwn ? "justify-end" : "justify-start"}`}
-            style={{ color: isOwn ? "#6abd7c" : "#4a9e5c" }}
+            className={`font-mono text-xs font-bold mb-0.5 flex items-center gap-1 flex-wrap ${isOwn ? "justify-end" : "justify-start"}`}
+            style={{ color: isOwn ? "#93c5fd" : "#2563eb" }}
           >
             {authorProfile?.level && <LevelBadge level={authorProfile.level} />}
             <span>
@@ -2334,20 +2334,20 @@ function ChatBubble({
               style={{
                 backgroundColor: isOwn
                   ? "rgba(0,0,0,0.25)"
-                  : "rgba(255,255,255,0.05)",
-                borderLeft: "3px solid #4a9e5c",
+                  : "rgba(0,0,0,0.03)",
+                borderLeft: "3px solid #2563eb",
               }}
               onClick={() => scrollToPost(replyToPostId!)}
             >
               <p
                 className="font-mono text-[10px] font-bold mb-0.5"
-                style={{ color: "#4a9e5c" }}
+                style={{ color: "#2563eb" }}
               >
                 {replyAuthorName}
               </p>
               <p
                 className="font-mono text-[10px] leading-snug line-clamp-2"
-                style={{ color: "#888" }}
+                style={{ color: "#6b7280" }}
               >
                 {replyToPost.content
                   ? parseReplyContent(replyToPost.content).displayContent.slice(
@@ -2362,8 +2362,8 @@ function ChatBubble({
           {/* Text content with @mention highlights */}
           {visibleContent && (
             <p
-              className="text-sm leading-relaxed whitespace-pre-wrap break-words"
-              style={{ color: isOwn ? "#d4edda" : "#e0e0e0" }}
+              className="text-base leading-relaxed whitespace-pre-wrap break-words"
+              style={{ color: isOwn ? "#ffffff" : "#111827" }}
             >
               {renderMentions(visibleContent, myUsername)}
             </p>
@@ -2411,7 +2411,7 @@ function ChatBubble({
           >
             <span
               className="font-mono text-[10px]"
-              style={{ color: isOwn ? "#6abd7c88" : "#555" }}
+              style={{ color: isOwn ? "#93c5fd88" : "#9ca3af" }}
             >
               {formatTime(createdAtMs)} · {timeAgo(createdAtMs)}
             </span>
@@ -2469,7 +2469,7 @@ function InlineMediaPreview({
           type="button"
           onClick={onDismiss}
           className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors mt-1"
-          style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+          style={{ backgroundColor: "#e5e7eb", color: "#6b7280" }}
           aria-label="Dismiss media preview"
           data-ocid="thread.inline_preview_dismiss_button"
         >
@@ -2529,15 +2529,15 @@ function InlineMediaPreview({
       <div
         className="flex items-center gap-2 flex-1 rounded-lg px-2.5 py-1.5"
         style={{
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
+          backgroundColor: "#f3f4f6",
+          border: "1px solid #e5e7eb",
           minWidth: 0,
         }}
       >
         {thumbnail}
         <span
           className="font-mono text-[10px] flex-1 truncate"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           {truncateUrl(url, 52)}
         </span>
@@ -2546,7 +2546,7 @@ function InlineMediaPreview({
         type="button"
         onClick={onDismiss}
         className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
-        style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+        style={{ backgroundColor: "#e5e7eb", color: "#6b7280" }}
         aria-label="Dismiss media preview"
         data-ocid="thread.inline_preview_dismiss_button"
       >
@@ -2603,8 +2603,8 @@ function LinkPreviewMini({ url }: { url: string }) {
     <div
       className="flex items-center gap-2 flex-1 rounded-lg px-2.5 py-1.5"
       style={{
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         minWidth: 0,
       }}
     >
@@ -2630,7 +2630,7 @@ function LinkPreviewMini({ url }: { url: string }) {
             width: 36,
             height: 36,
             borderRadius: 4,
-            backgroundColor: "#2a2a2a",
+            backgroundColor: "#e5e7eb",
             flexShrink: 0,
           }}
         />
@@ -2639,19 +2639,19 @@ function LinkPreviewMini({ url }: { url: string }) {
         {status === "ready" && meta?.title ? (
           <span
             className="font-mono text-[11px] font-bold truncate"
-            style={{ color: "#e0e0e0" }}
+            style={{ color: "#111827" }}
           >
             {meta.title}
           </span>
         ) : (
           <span
             className="font-mono text-[10px] truncate"
-            style={{ color: "#888" }}
+            style={{ color: "#6b7280" }}
           >
             {truncateUrl(url, 48)}
           </span>
         )}
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+        <span className="font-mono text-[10px]" style={{ color: "#9ca3af" }}>
           {hostname}
         </span>
       </div>
@@ -2683,28 +2683,28 @@ function ReplyPreviewBar({
       <div
         className="flex items-start gap-2 flex-1 rounded-lg px-2.5 py-1.5"
         style={{
-          backgroundColor: "#1a1a1a",
-          borderLeft: "3px solid #4a9e5c",
-          border: "1px solid #2a2a2a",
+          backgroundColor: "#f3f4f6",
+          borderLeft: "3px solid #2563eb",
+          border: "1px solid #e5e7eb",
           borderLeftWidth: 3,
-          borderLeftColor: "#4a9e5c",
+          borderLeftColor: "#2563eb",
           minWidth: 0,
         }}
       >
         <CornerUpLeft
           size={12}
-          style={{ color: "#4a9e5c", flexShrink: 0, marginTop: 2 }}
+          style={{ color: "#2563eb", flexShrink: 0, marginTop: 2 }}
         />
         <div className="min-w-0">
           <p
             className="font-mono text-[10px] font-bold"
-            style={{ color: "#4a9e5c" }}
+            style={{ color: "#2563eb" }}
           >
             {displayName}
           </p>
           <p
             className="font-mono text-[10px] truncate"
-            style={{ color: "#888" }}
+            style={{ color: "#6b7280" }}
           >
             {preview}
           </p>
@@ -2714,7 +2714,7 @@ function ReplyPreviewBar({
         type="button"
         onClick={onCancel}
         className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors"
-        style={{ backgroundColor: "#2a2a2a", color: "#888" }}
+        style={{ backgroundColor: "#e5e7eb", color: "#6b7280" }}
         aria-label="Cancel reply"
         data-ocid="thread.reply_preview_cancel_button"
       >
@@ -2750,8 +2750,8 @@ function MentionDropdown({
     <div
       className="absolute bottom-full left-3 right-3 mb-1 rounded-xl overflow-hidden shadow-xl z-40"
       style={{
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         boxShadow: "0 -8px 24px rgba(0,0,0,0.5)",
       }}
       data-ocid="thread.mention_dropdown"
@@ -2763,7 +2763,7 @@ function MentionDropdown({
           <button
             type="button"
             key={profile.sessionId}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-white/5"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-black/5"
             onClick={() => onSelect(profile.username)}
             data-ocid="thread.mention_dropdown_item"
           >
@@ -2778,7 +2778,7 @@ function MentionDropdown({
                 flexShrink: 0,
               }}
             />
-            <span className="font-mono text-xs" style={{ color: "#e0e0e0" }}>
+            <span className="font-mono text-xs" style={{ color: "#111827" }}>
               @{profile.username}
             </span>
           </button>
@@ -3505,14 +3505,14 @@ export default function ThreadPage() {
   if (notFound) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-        <p className="font-mono text-sm" style={{ color: "#444" }}>
+        <p className="font-mono text-sm" style={{ color: "#9ca3af" }}>
           Thread not found.
         </p>
         <Button
           variant="ghost"
           onClick={() => navigate({ to: "/" })}
           className="mt-4 font-mono text-xs"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           ← Back to catalog
         </Button>
@@ -3526,7 +3526,7 @@ export default function ThreadPage() {
         className="flex items-center justify-center h-full"
         data-ocid="thread.loading_state"
       >
-        <p className="font-mono text-sm" style={{ color: "#444" }}>
+        <p className="font-mono text-sm" style={{ color: "#9ca3af" }}>
           Loading…
         </p>
       </div>
@@ -3535,8 +3535,8 @@ export default function ThreadPage() {
 
   const category = categories.find((c) => c.id === thread.categoryId);
   const catColor = category
-    ? (CATEGORY_COLORS[category.name] ?? "#555")
-    : "#555";
+    ? (CATEGORY_COLORS[category.name] ?? "#9ca3af")
+    : "#9ca3af";
   const live = isThreadLive(threadIdNum);
   const creatorProfile = profileMap.get(thread.creatorSessionId);
   const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
@@ -3545,22 +3545,22 @@ export default function ThreadPage() {
   return (
     <div
       className="flex flex-col flex-1 min-h-0"
-      style={{ backgroundColor: "#0d0d0d" }}
+      style={{ backgroundColor: "#ffffff" }}
     >
       {/* ── Compact thread header ──────────────────────── */}
       <div
         className={`shrink-0 border-b transition-transform duration-200 ${!headerVisible ? "-translate-y-full" : "translate-y-0"}`}
         style={{
-          backgroundColor: "#111111",
-          borderBottomColor: "#2a2a2a",
+          backgroundColor: "#f8f9fa",
+          borderBottomColor: "#e5e7eb",
         }}
       >
         <div className="max-w-3xl mx-auto flex items-center gap-3 px-3 py-1.5 md:py-2">
           <button
             type="button"
             onClick={() => navigate({ to: "/" })}
-            className="shrink-0 p-1.5 rounded transition-colors hover:bg-white/5"
-            style={{ color: "#888" }}
+            className="shrink-0 p-1.5 rounded transition-colors hover:bg-black/5"
+            style={{ color: "#6b7280" }}
             data-ocid="thread.back_button"
             aria-label="Back to catalog"
           >
@@ -3598,7 +3598,7 @@ export default function ThreadPage() {
                     className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
                     style={{
                       backgroundColor: "#77777722",
-                      color: "#777",
+                      color: "#6b7280",
                       border: "1px solid #77777744",
                     }}
                   >
@@ -3614,19 +3614,19 @@ export default function ThreadPage() {
                     width: 7,
                     height: 7,
                     borderRadius: "50%",
-                    backgroundColor: live ? "#4a9e5c" : "#444",
-                    boxShadow: live ? "0 0 5px #4a9e5c" : "none",
+                    backgroundColor: live ? "#2563eb" : "#9ca3af",
+                    boxShadow: live ? "0 0 5px #2563eb" : "none",
                   }}
                 />
                 <span
                   className="font-mono text-[10px] uppercase tracking-wider"
-                  style={{ color: live ? "#4a9e5c" : "#444" }}
+                  style={{ color: live ? "#2563eb" : "#9ca3af" }}
                 >
                   {live ? "LIVE" : "OFFLINE"}
                 </span>
                 <span
                   className="font-mono text-[10px] ml-0.5"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {Number(thread.postCount)}
                 </span>
@@ -3638,7 +3638,7 @@ export default function ThreadPage() {
               <h1
                 ref={titleRef}
                 className={`font-semibold text-base leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
-                style={{ color: "#e0e0e0" }}
+                style={{ color: "#111827" }}
               >
                 {thread.title}
               </h1>
@@ -3646,8 +3646,8 @@ export default function ThreadPage() {
                 <button
                   type="button"
                   onClick={() => setTitleCollapsed((v) => !v)}
-                  className="shrink-0 p-0.5 rounded transition-colors hover:bg-white/5 mt-0.5"
-                  style={{ color: "#555" }}
+                  className="shrink-0 p-0.5 rounded transition-colors hover:bg-black/5 mt-0.5"
+                  style={{ color: "#9ca3af" }}
                   aria-label={
                     titleCollapsed ? "Show full title" : "Collapse title"
                   }
@@ -3666,13 +3666,13 @@ export default function ThreadPage() {
             <div className="flex items-center gap-2 mt-0.5">
               <span
                 className="font-mono"
-                style={{ fontSize: "0.75rem", color: "#444" }}
+                style={{ fontSize: "0.75rem", color: "#9ca3af" }}
               >
                 {creatorName}
               </span>
               <span
                 className="font-mono"
-                style={{ fontSize: "0.75rem", color: "#333" }}
+                style={{ fontSize: "0.75rem", color: "#9ca3af" }}
               >
                 {timeAgo(createdAtMs)}
               </span>
@@ -3681,7 +3681,7 @@ export default function ThreadPage() {
                 {Number(thread.postCount) > 0 && (
                   <span
                     className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                    style={{ color: "#444" }}
+                    style={{ color: "#9ca3af" }}
                     title={`${Number(thread.postCount)} posts`}
                   >
                     <MessageSquare size={11} />
@@ -3692,7 +3692,7 @@ export default function ThreadPage() {
                 {Number(thread.viewCount) > 0 && (
                   <span
                     className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                    style={{ color: "#444" }}
+                    style={{ color: "#9ca3af" }}
                     title={`${Number(thread.viewCount)} views`}
                   >
                     <Eye size={11} />
@@ -3703,8 +3703,8 @@ export default function ThreadPage() {
                 <button
                   type="button"
                   onClick={handleShareThread}
-                  className="p-1 rounded transition-colors hover:bg-white/5"
-                  style={{ color: "#444" }}
+                  className="p-1 rounded transition-colors hover:bg-black/5"
+                  style={{ color: "#9ca3af" }}
                   aria-label="Share this chat"
                   data-ocid="thread.share_button"
                 >
@@ -3713,8 +3713,8 @@ export default function ThreadPage() {
                 <button
                   type="button"
                   onClick={handleBookmarkThread}
-                  className="p-1 rounded transition-colors hover:bg-white/5"
-                  style={{ color: threadBookmarked ? "#f0c040" : "#444" }}
+                  className="p-1 rounded transition-colors hover:bg-black/5"
+                  style={{ color: threadBookmarked ? "#f0c040" : "#9ca3af" }}
                   aria-label={
                     threadBookmarked ? "Remove bookmark" : "Bookmark this chat"
                   }
@@ -3731,8 +3731,8 @@ export default function ThreadPage() {
                     setReportChatModalOpen(true);
                     setThreadReported(true);
                   }}
-                  className="p-1 rounded transition-colors hover:bg-white/5"
-                  style={{ color: threadReported ? "#c0392b" : "#444" }}
+                  className="p-1 rounded transition-colors hover:bg-black/5"
+                  style={{ color: threadReported ? "#c0392b" : "#9ca3af" }}
                   aria-label="Report this chat"
                   data-ocid="thread.report_chat_button"
                 >
@@ -3762,20 +3762,20 @@ export default function ThreadPage() {
             className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
             style={{
               backgroundColor: "rgba(74,158,92,0.08)",
-              border: "2px dashed #4a9e5c44",
+              border: "2px dashed #2563eb44",
             }}
           >
             <div
               className="flex flex-col items-center gap-2 px-6 py-4 rounded-xl"
               style={{
                 backgroundColor: "rgba(0,0,0,0.7)",
-                border: "1px dashed #4a9e5c88",
+                border: "1px dashed #2563eb88",
               }}
             >
-              <ImagePlus size={28} style={{ color: "#4a9e5c" }} />
+              <ImagePlus size={28} style={{ color: "#2563eb" }} />
               <span
                 className="font-mono text-sm font-medium"
-                style={{ color: "#4a9e5c" }}
+                style={{ color: "#2563eb" }}
               >
                 Drop image to share
               </span>
@@ -3789,7 +3789,7 @@ export default function ThreadPage() {
               className="flex items-center justify-center h-32"
               data-ocid="thread.post.empty_state"
             >
-              <p className="font-mono text-sm" style={{ color: "#333" }}>
+              <p className="font-mono text-sm" style={{ color: "#9ca3af" }}>
                 No messages yet. Say something.
               </p>
             </div>
@@ -3851,11 +3851,11 @@ export default function ThreadPage() {
                 }}
                 className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all"
                 style={{
-                  backgroundColor: "#1e1e1e",
-                  border: "1px solid #2a2a2a",
+                  backgroundColor: "#f0f2f5",
+                  border: "1px solid #e5e7eb",
                   boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
                   pointerEvents: "auto",
-                  color: "#4a9e5c",
+                  color: "#2563eb",
                   cursor: "pointer",
                 }}
                 aria-label="Jump to mention"
@@ -3863,7 +3863,7 @@ export default function ThreadPage() {
               >
                 <span
                   className="font-mono text-sm font-bold"
-                  style={{ color: "#4a9e5c" }}
+                  style={{ color: "#2563eb" }}
                 >
                   @
                 </span>
@@ -3877,8 +3877,8 @@ export default function ThreadPage() {
                 onClick={scrollToBottom}
                 className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all"
                 style={{
-                  backgroundColor: "#1e1e1e",
-                  border: "1px solid #2a2a2a",
+                  backgroundColor: "#f0f2f5",
+                  border: "1px solid #e5e7eb",
                   boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
                   pointerEvents: "auto",
                   cursor: "pointer",
@@ -3886,7 +3886,7 @@ export default function ThreadPage() {
                 aria-label={`${unreadCount} new message${unreadCount > 1 ? "s" : ""} — scroll to bottom`}
                 data-ocid="thread.scroll_to_bottom_button"
               >
-                <ChevronDown size={16} style={{ color: "#4a9e5c" }} />
+                <ChevronDown size={16} style={{ color: "#2563eb" }} />
                 <span
                   className="font-mono text-xs font-bold"
                   style={{ color: "#ffffff" }}
@@ -3904,14 +3904,14 @@ export default function ThreadPage() {
         <div
           className="shrink-0 border-t"
           style={{
-            backgroundColor: "#111",
-            borderTopColor: "#2a2a2a",
+            backgroundColor: "#f3f4f6",
+            borderTopColor: "#e5e7eb",
           }}
           data-ocid="thread.compose_bar"
         >
           <div className="max-w-3xl mx-auto flex items-center justify-center px-4 py-3">
-            <Lock size={13} style={{ color: "#555", marginRight: 8 }} />
-            <span className="font-mono text-xs" style={{ color: "#555" }}>
+            <Lock size={13} style={{ color: "#9ca3af", marginRight: 8 }} />
+            <span className="font-mono text-xs" style={{ color: "#9ca3af" }}>
               This thread is closed — no new messages
             </span>
           </div>
@@ -3920,8 +3920,8 @@ export default function ThreadPage() {
         <div
           className="shrink-0 border-t"
           style={{
-            backgroundColor: "#111111",
-            borderTopColor: "#2a2a2a",
+            backgroundColor: "#f8f9fa",
+            borderTopColor: "#e5e7eb",
           }}
           data-ocid="thread.compose_bar"
         >
@@ -3956,7 +3956,7 @@ export default function ThreadPage() {
                       height: 60,
                       objectFit: "cover",
                       borderRadius: 8,
-                      border: "1px solid #2d6b3a",
+                      border: "1px solid #1d4ed8",
                     }}
                   />
                   <button
@@ -3971,7 +3971,7 @@ export default function ThreadPage() {
                 </div>
                 <span
                   className="font-mono text-[10px] mt-1 truncate max-w-48"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {uploadedImage.name}
                 </span>
@@ -4004,10 +4004,10 @@ export default function ThreadPage() {
                   className="p-2 rounded-full transition-colors"
                   style={{
                     color:
-                      uploadedImage || mediaPopoverOpen ? "#4a9e5c" : "#555",
+                      uploadedImage || mediaPopoverOpen ? "#2563eb" : "#9ca3af",
                     backgroundColor:
                       uploadedImage || mediaPopoverOpen
-                        ? "#4a9e5c18"
+                        ? "#2563eb18"
                         : "transparent",
                   }}
                   aria-label="Media"
@@ -4030,8 +4030,8 @@ export default function ThreadPage() {
                     <div
                       className="flex flex-col rounded-xl overflow-hidden shadow-2xl"
                       style={{
-                        backgroundColor: "#111",
-                        border: "1px solid #2a2a2a",
+                        backgroundColor: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
                         minWidth: 160,
                         boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
                       }}
@@ -4040,16 +4040,16 @@ export default function ThreadPage() {
                       {mediaPopoverTab === "image" && (
                         <div
                           className="flex items-center gap-1 px-2 pt-2 pb-1"
-                          style={{ borderBottom: "1px solid #1e1e1e" }}
+                          style={{ borderBottom: "1px solid #f0f2f5" }}
                         >
                           <button
                             type="button"
                             onClick={() => setMediaPopoverTab("image")}
                             className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-all"
                             style={{
-                              backgroundColor: "#4a9e5c18",
-                              color: "#4a9e5c",
-                              border: "1px solid #4a9e5c44",
+                              backgroundColor: "#2563eb18",
+                              color: "#2563eb",
+                              border: "1px solid #2563eb44",
                             }}
                           >
                             📎 Image
@@ -4060,7 +4060,7 @@ export default function ThreadPage() {
                             className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-all"
                             style={{
                               backgroundColor: "transparent",
-                              color: "#555",
+                              color: "#9ca3af",
                               border: "1px solid transparent",
                             }}
                           >
@@ -4077,11 +4077,11 @@ export default function ThreadPage() {
                             fileInputRef.current?.click();
                             setMediaPopoverOpen(false);
                           }}
-                          className="w-full flex items-center gap-2.5 px-4 py-3 font-mono text-xs text-left transition-colors hover:bg-white/5"
-                          style={{ color: "#ccc" }}
+                          className="w-full flex items-center gap-2.5 px-4 py-3 font-mono text-xs text-left transition-colors hover:bg-black/5"
+                          style={{ color: "#374151" }}
                           data-ocid="thread.image_upload_button"
                         >
-                          <ImagePlus size={13} style={{ color: "#4a9e5c" }} />
+                          <ImagePlus size={13} style={{ color: "#2563eb" }} />
                           Upload image
                         </button>
                       )}
@@ -4116,8 +4116,8 @@ export default function ThreadPage() {
                   onKeyDown={handleInputKeyDown}
                   className="flex-1 h-10 border-0 focus-visible:ring-1 text-sm"
                   style={{
-                    backgroundColor: "#1e1e1e",
-                    color: "#e0e0e0",
+                    backgroundColor: "#f0f2f5",
+                    color: "#111827",
                     borderRadius: 20,
                     paddingLeft: 16,
                     paddingRight: 16,
@@ -4139,7 +4139,7 @@ export default function ThreadPage() {
                   disabled={submitting}
                   className="shrink-0 p-2.5 rounded-full transition-colors disabled:opacity-40"
                   style={{
-                    backgroundColor: "#4a9e5c",
+                    backgroundColor: "#2563eb",
                     color: "#fff",
                   }}
                   aria-label="Send message"

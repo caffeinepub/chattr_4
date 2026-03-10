@@ -11,7 +11,7 @@ const LEVEL_COLORS: Record<
   string,
   { bg: string; text: string; border: string }
 > = {
-  Newcomer: { bg: "#55555522", text: "#888", border: "#55555544" },
+  Newcomer: { bg: "#55555522", text: "#6b7280", border: "#55555544" },
   Regular: { bg: "#2980b922", text: "#5ba3d9", border: "#2980b944" },
   Contributor: { bg: "#27ae6022", text: "#4abd7c", border: "#27ae6044" },
   Veteran: { bg: "#e67e2222", text: "#f09b4a", border: "#e67e2244" },

@@ -40,7 +40,7 @@ export default function OnboardingModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
-  const defaultAvatar = generatePixelAvatar(sessionId, 80);
+  const defaultAvatar = generatePixelAvatar(sessionId, 96);
 
   function validateUsername(val: string): string {
     if (!val.trim()) return "Username is required";
@@ -205,14 +205,14 @@ export default function OnboardingModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
       data-ocid="onboarding.modal"
     >
       <div
         className="w-full max-w-sm rounded-xl p-6 relative"
         style={{
-          backgroundColor: "#111111",
-          border: "1px solid #2a2a2a",
+          backgroundColor: "#f8f9fa",
+          border: "1px solid #e5e7eb",
           boxShadow: "0 24px 64px rgba(0,0,0,0.8)",
         }}
       >
@@ -220,17 +220,17 @@ export default function OnboardingModal({
         <div className="text-center mb-6">
           <div
             className="font-mono text-xs uppercase tracking-widest mb-2"
-            style={{ color: "#4a9e5c" }}
+            style={{ color: "#2563eb" }}
           >
             chattr
           </div>
           <h1
             className="font-semibold text-xl"
-            style={{ color: "#e0e0e0", fontFamily: "'Geist Mono', monospace" }}
+            style={{ color: "#111827", fontFamily: "'Geist Mono', monospace" }}
           >
             Pick your identity
           </h1>
-          <p className="font-mono text-xs mt-1.5" style={{ color: "#555" }}>
+          <p className="font-mono text-xs mt-1.5" style={{ color: "#9ca3af" }}>
             One-time setup — no account required
           </p>
         </div>
@@ -242,7 +242,7 @@ export default function OnboardingModal({
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: div with drag-drop and click-to-open-file-dialog; keyboard users can use the button below */}
             <div
               className="relative cursor-pointer rounded-full"
-              style={{ width: 80, height: 80 }}
+              style={{ width: 96, height: 96 }}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               onDragOver={handleDragOver}
@@ -259,8 +259,8 @@ export default function OnboardingModal({
                   borderRadius: "50%",
                   objectFit: "cover",
                   border: isDragging
-                    ? "2px dashed #4a9e5c"
-                    : "2px solid #2a2a2a",
+                    ? "2px dashed #2563eb"
+                    : "2px solid #e5e7eb",
                   transition: "border-color 0.15s",
                 }}
               />
@@ -269,7 +269,7 @@ export default function OnboardingModal({
                 className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
                 style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
               >
-                <ImagePlus size={20} style={{ color: "#4a9e5c" }} />
+                <ImagePlus size={20} style={{ color: "#2563eb" }} />
               </div>
               {/* Remove custom avatar */}
               {avatarPreview && (
@@ -297,14 +297,14 @@ export default function OnboardingModal({
                   fileInputRef.current?.click();
                 }}
                 className="font-mono text-[10px] uppercase tracking-wider transition-colors"
-                style={{ color: "#555" }}
+                style={{ color: "#9ca3af" }}
                 data-ocid="onboarding.avatar_upload_button"
               >
                 {avatarPreview ? "Change avatar" : "Upload avatar"}
               </button>
               <span
                 className="font-mono text-[10px]"
-                style={{ color: "#2a2a2a" }}
+                style={{ color: "#e5e7eb" }}
               >
                 |
               </span>
@@ -312,7 +312,7 @@ export default function OnboardingModal({
                 type="button"
                 onClick={() => setShowGifPicker((v) => !v)}
                 className="font-mono text-[10px] uppercase tracking-wider transition-colors"
-                style={{ color: showGifPicker ? "#ff6b9d" : "#555" }}
+                style={{ color: showGifPicker ? "#ff6b9d" : "#9ca3af" }}
                 data-ocid="onboarding.gif_avatar_button"
               >
                 🎞 Pick GIF
@@ -347,7 +347,7 @@ export default function OnboardingModal({
             <label
               htmlFor="onboarding-username"
               className="font-mono text-xs uppercase tracking-wider"
-              style={{ color: "#888" }}
+              style={{ color: "#6b7280" }}
             >
               Username
             </label>
@@ -365,15 +365,15 @@ export default function OnboardingModal({
                 spellCheck={false}
                 className="font-mono text-sm pr-14"
                 style={{
-                  backgroundColor: "#0d0d0d",
-                  border: `1px solid ${usernameError ? "#c0392b" : "#2a2a2a"}`,
-                  color: "#e0e0e0",
+                  backgroundColor: "#ffffff",
+                  border: `1px solid ${usernameError ? "#c0392b" : "#e5e7eb"}`,
+                  color: "#111827",
                 }}
                 data-ocid="onboarding.username_input"
               />
               <span
                 className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px]"
-                style={{ color: username.length > 18 ? "#c0392b" : "#444" }}
+                style={{ color: username.length > 18 ? "#c0392b" : "#9ca3af" }}
               >
                 {username.length}/20
               </span>
@@ -383,7 +383,7 @@ export default function OnboardingModal({
             {(usernameError || checkingUsername) && (
               <div
                 className="font-mono text-[11px] flex items-center gap-1"
-                style={{ color: usernameError ? "#c0392b" : "#888" }}
+                style={{ color: usernameError ? "#c0392b" : "#6b7280" }}
                 data-ocid="onboarding.error_state"
               >
                 {checkingUsername ? (
@@ -404,9 +404,9 @@ export default function OnboardingModal({
             disabled={!canSubmit}
             className="w-full font-mono text-sm uppercase tracking-widest"
             style={{
-              backgroundColor: canSubmit ? "#4a9e5c" : "#1a1a1a",
-              color: canSubmit ? "#0d0d0d" : "#444",
-              border: canSubmit ? "none" : "1px solid #2a2a2a",
+              backgroundColor: canSubmit ? "#2563eb" : "#f3f4f6",
+              color: canSubmit ? "#ffffff" : "#9ca3af",
+              border: canSubmit ? "none" : "1px solid #e5e7eb",
               fontWeight: 700,
               height: 44,
             }}

@@ -49,8 +49,8 @@ function Header({
       <header
         className="sticky top-0 z-50 border-b"
         style={{
-          backgroundColor: "#111111",
-          borderBottomColor: "#2a2a2a",
+          backgroundColor: "#f8f9fa",
+          borderBottomColor: "#e5e7eb",
         }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
@@ -60,10 +60,10 @@ function Header({
             className="transition-colors shrink-0"
             style={{
               fontFamily: "'Jersey 10', monospace",
-              fontSize: "1.75rem",
+              fontSize: "2.25rem",
               fontWeight: "normal",
               letterSpacing: 0,
-              color: "#4a9e5c",
+              color: "#2563eb",
               lineHeight: 1,
             }}
             data-ocid="nav.link"
@@ -83,7 +83,7 @@ function Header({
                   to={link.to}
                   className="font-mono text-xs uppercase tracking-widest transition-colors whitespace-nowrap"
                   style={{
-                    color: active ? "#4a9e5c" : "#888888",
+                    color: active ? "#2563eb" : "#6b7280",
                   }}
                   data-ocid="nav.link"
                 >
@@ -102,11 +102,11 @@ function Header({
               src={avatarSrc}
               alt={profile?.username ?? sessionId}
               style={{
-                width: 28,
-                height: 28,
+                width: 34,
+                height: 34,
                 borderRadius: "50%",
                 objectFit: "cover",
-                border: "1px solid #2a2a2a",
+                border: "1px solid #e5e7eb",
                 cursor: "pointer",
                 flexShrink: 0,
               }}
@@ -118,7 +118,7 @@ function Header({
             <div className="hidden sm:flex items-center gap-1.5">
               <span
                 className="font-mono text-xs"
-                style={{ color: "#888" }}
+                style={{ color: "#6b7280" }}
                 data-ocid="header.username"
               >
                 {profile?.username ?? sessionId}
@@ -130,8 +130,8 @@ function Header({
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded transition-colors hover:bg-white/5"
-              style={{ color: "#555" }}
+              className="p-1.5 rounded transition-colors hover:bg-black/5"
+              style={{ color: "#9ca3af" }}
               aria-label="Open settings"
               data-ocid="header.settings_open_modal_button"
             >
@@ -191,8 +191,8 @@ function RootLayout() {
         isThreadPage ? "flex flex-col overflow-hidden" : "min-h-screen"
       }
       style={{
-        backgroundColor: "#0d0d0d",
-        color: "#e0e0e0",
+        backgroundColor: "#ffffff",
+        color: "#111827",
         ...(isThreadPage ? { height: "100dvh" } : {}),
       }}
     >
@@ -219,26 +219,26 @@ function RootLayout() {
       {!isThreadPage && (
         <footer
           className="border-t py-6 mt-12 text-center space-y-2"
-          style={{ borderColor: "#1a1a1a" }}
+          style={{ borderColor: "#f3f4f6" }}
         >
-          <p className="font-mono text-xs" style={{ color: "#444" }}>
+          <p className="font-mono text-xs" style={{ color: "#9ca3af" }}>
             <Link
               to="/admin"
               className="transition-colors hover:opacity-70"
-              style={{ color: "#555" }}
+              style={{ color: "#9ca3af" }}
               data-ocid="footer.admin.link"
             >
               Admin
             </Link>
           </p>
-          <p className="font-mono text-xs" style={{ color: "#444" }}>
+          <p className="font-mono text-xs" style={{ color: "#9ca3af" }}>
             © {new Date().getFullYear()} Chattr. Built with love using{" "}
             <a
               href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="transition-colors"
-              style={{ color: "#555" }}
+              style={{ color: "#9ca3af" }}
             >
               caffeine.ai
             </a>
@@ -246,12 +246,12 @@ function RootLayout() {
         </footer>
       )}
       <Toaster
-        theme="dark"
+        theme="light"
         toastOptions={{
           style: {
-            background: "#1a1a1a",
-            border: "1px solid #2a2a2a",
-            color: "#e0e0e0",
+            background: "#ffffff",
+            border: "1px solid #e5e7eb",
+            color: "#111827",
           },
         }}
       />

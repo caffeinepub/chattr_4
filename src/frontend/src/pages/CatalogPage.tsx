@@ -78,7 +78,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function getCategoryColor(name: string): string {
-  return CATEGORY_COLORS[name] ?? "#555";
+  return CATEGORY_COLORS[name] ?? "#9ca3af";
 }
 
 function timeAgo(tsMs: number): string {
@@ -129,8 +129,8 @@ function LiveDot({ live }: { live: boolean }) {
         width: 8,
         height: 8,
         borderRadius: "50%",
-        backgroundColor: live ? "#4a9e5c" : "#444",
-        boxShadow: live ? "0 0 6px #4a9e5c" : "none",
+        backgroundColor: live ? "#2563eb" : "#9ca3af",
+        boxShadow: live ? "0 0 6px #2563eb" : "none",
       }}
     />
   );
@@ -249,7 +249,7 @@ function OverlayThumbnailCard({
         <FaviconImg hostname={hostname} />
         <span
           className="font-mono"
-          style={{ fontSize: 10, color: "#aaa", lineHeight: 1.2 }}
+          style={{ fontSize: 10, color: "#cbd5e1", lineHeight: 1.2 }}
         >
           {label}
         </span>
@@ -260,7 +260,7 @@ function OverlayThumbnailCard({
           className="font-mono"
           style={{
             fontSize: 11,
-            color: "#eee",
+            color: "#f1f5f9",
             margin: 0,
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -278,7 +278,7 @@ function OverlayThumbnailCard({
           className="font-mono"
           style={{
             fontSize: 10,
-            color: "#999",
+            color: "#94a3b8",
             margin: "2px 0 0",
             display: "-webkit-box",
             WebkitLineClamp: 1,
@@ -301,7 +301,7 @@ function OverlayThumbnailCard({
         borderRadius: 6,
         marginBottom: 8,
         overflow: "hidden",
-        backgroundColor: "#111",
+        backgroundColor: "#f3f4f6",
         position: "relative",
       }}
     >
@@ -400,8 +400,8 @@ function TwitterThumbnailCard({ url }: { url: string }) {
         width: "100%",
         borderRadius: 6,
         marginBottom: 8,
-        backgroundColor: "#111",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         padding: "8px 10px",
       }}
     >
@@ -424,13 +424,13 @@ function TwitterThumbnailCard({ url }: { url: string }) {
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
         </svg>
         {loading ? (
-          <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+          <span className="font-mono text-[10px]" style={{ color: "#9ca3af" }}>
             Loading tweet…
           </span>
         ) : (
           <span
             className="font-mono text-[10px] font-semibold"
-            style={{ color: "#aaa" }}
+            style={{ color: "#4b5563" }}
           >
             {tweetAuthor ?? "X / Twitter"}
           </span>
@@ -440,7 +440,7 @@ function TwitterThumbnailCard({ url }: { url: string }) {
         <p
           className="font-mono text-[11px] leading-snug"
           style={{
-            color: "#bbb",
+            color: "#374151",
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
@@ -453,7 +453,7 @@ function TwitterThumbnailCard({ url }: { url: string }) {
         </p>
       )}
       {!loading && !tweetText && (
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+        <span className="font-mono text-[10px]" style={{ color: "#9ca3af" }}>
           X / Twitter post
         </span>
       )}
@@ -540,13 +540,13 @@ function RumbleThumbnailCard({ url }: { url: string }) {
           aspectRatio: "16 / 9",
           borderRadius: 6,
           marginBottom: 8,
-          backgroundColor: "#111",
+          backgroundColor: "#f3f4f6",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+        <span className="font-mono text-[10px]" style={{ color: "#9ca3af" }}>
           Loading…
         </span>
       </div>
@@ -596,7 +596,7 @@ function YouTubeThumbnailCard({ url }: { url: string }) {
         aspectRatio: "16 / 9",
         borderRadius: 6,
         marginBottom: 8,
-        backgroundColor: "#111",
+        backgroundColor: "#f3f4f6",
       }}
     />
   );
@@ -745,13 +745,13 @@ function LinkThumbnailCard({ url }: { url: string }) {
           aspectRatio: "16 / 9",
           borderRadius: 6,
           marginBottom: 8,
-          backgroundColor: "#111",
+          backgroundColor: "#f3f4f6",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <span className="font-mono text-[10px]" style={{ color: "#555" }}>
+        <span className="font-mono text-[10px]" style={{ color: "#9ca3af" }}>
           Loading…
         </span>
       </div>
@@ -765,8 +765,8 @@ function LinkThumbnailCard({ url }: { url: string }) {
         width: "100%",
         borderRadius: 6,
         marginBottom: 8,
-        backgroundColor: "#111",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         padding: "8px 10px",
       }}
     >
@@ -781,7 +781,7 @@ function LinkThumbnailCard({ url }: { url: string }) {
         <FaviconImg hostname={hostname} />
         <span
           className="font-mono text-[10px] font-semibold"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           {meta?.siteName ?? hostname}
         </span>
@@ -790,7 +790,7 @@ function LinkThumbnailCard({ url }: { url: string }) {
         <p
           className="font-mono text-[11px] leading-snug"
           style={{
-            color: "#bbb",
+            color: "#374151",
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
@@ -805,7 +805,7 @@ function LinkThumbnailCard({ url }: { url: string }) {
         <p
           className="font-mono text-[10px] leading-snug mt-1"
           style={{
-            color: "#666",
+            color: "#6b7280",
             display: "-webkit-box",
             WebkitLineClamp: 1,
             WebkitBoxOrient: "vertical",
@@ -906,8 +906,8 @@ function RedditThumbnailCard({ url }: { url: string }) {
         width: "100%",
         borderRadius: 6,
         marginBottom: 8,
-        backgroundColor: "#111",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         padding: "8px 10px",
       }}
     >
@@ -943,7 +943,7 @@ function RedditThumbnailCard({ url }: { url: string }) {
       <p
         className="font-mono text-[11px] leading-snug"
         style={{
-          color: "#bbb",
+          color: "#374151",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
@@ -991,7 +991,7 @@ function ThreadCardThumbnail({ thread }: { thread: Thread }) {
           aspectRatio: "16 / 9",
           borderRadius: 6,
           marginBottom: 8,
-          backgroundColor: "#111",
+          backgroundColor: "#f3f4f6",
         }}
       />
     );
@@ -1048,7 +1048,7 @@ function ThreadCard({
 }: ThreadCardProps) {
   const category = categories.find((c) => c.id === thread.categoryId);
   const live = isThreadLive(thread.lastActivity);
-  const catColor = category ? getCategoryColor(category.name) : "#555";
+  const catColor = category ? getCategoryColor(category.name) : "#9ca3af";
   const createdAtMs = backendApi.nsToMs(thread.createdAt);
   const creatorProfile = profiles.find(
     (p) => p.sessionId === thread.creatorSessionId,
@@ -1071,8 +1071,8 @@ function ThreadCard({
     <div
       className="thread-card cursor-pointer rounded relative"
       style={{
-        backgroundColor: "#1a1a1a",
-        border: "1px solid #2a2a2a",
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #e5e7eb",
         padding: "12px",
       }}
       onClick={onClick}
@@ -1091,8 +1091,8 @@ function ThreadCard({
           style={{
             minWidth: 18,
             height: 18,
-            backgroundColor: "#4a9e5c",
-            color: "#0d0d0d",
+            backgroundColor: "#2563eb",
+            color: "#ffffff",
             padding: "0 5px",
             boxShadow: "0 0 8px rgba(74,158,92,0.6)",
           }}
@@ -1122,7 +1122,7 @@ function ThreadCard({
           <span
             className="font-mono text-xs uppercase"
             style={{
-              color: live ? "#4a9e5c" : "#444",
+              color: live ? "#2563eb" : "#9ca3af",
               letterSpacing: "0.08em",
             }}
           >
@@ -1131,7 +1131,7 @@ function ThreadCard({
           {liveUsers > 0 && (
             <span
               className="font-mono text-[0.75rem]"
-              style={{ color: "#555" }}
+              style={{ color: "#9ca3af" }}
             >
               {liveUsers}
             </span>
@@ -1141,9 +1141,9 @@ function ThreadCard({
 
       {/* Title */}
       <h3
-        className="font-sans text-sm font-medium mb-3 leading-snug"
+        className="font-sans text-base font-medium mb-3 leading-snug"
         style={{
-          color: "#e0e0e0",
+          color: "#111827",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
@@ -1160,13 +1160,13 @@ function ThreadCard({
           {creatorProfile?.level && <LevelBadge level={creatorProfile.level} />}
           <span
             className="font-mono text-xs truncate"
-            style={{ color: "#444" }}
+            style={{ color: "#9ca3af" }}
           >
             {creatorName}
           </span>
           <span
             className="font-mono text-xs shrink-0"
-            style={{ color: "#333" }}
+            style={{ color: "#9ca3af" }}
           >
             {timeAgo(createdAtMs)}
           </span>
@@ -1182,22 +1182,22 @@ function ThreadCard({
           {/* Post count */}
           {Number(thread.postCount) > 0 && (
             <span
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-              style={{ color: "#444" }}
+              className="inline-flex items-center gap-1.5 font-mono text-xs px-1 py-0.5 rounded"
+              style={{ color: "#9ca3af" }}
               title={`${Number(thread.postCount)} posts`}
             >
-              <MessageSquare size={11} />
+              <MessageSquare size={13} />
               {Number(thread.postCount)}
             </span>
           )}
           {/* View count */}
           {Number(thread.viewCount) > 0 && (
             <span
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-              style={{ color: "#444" }}
+              className="inline-flex items-center gap-1.5 font-mono text-xs px-1 py-0.5 rounded"
+              style={{ color: "#9ca3af" }}
               title={`${Number(thread.viewCount)} views`}
             >
-              <Eye size={11} />
+              <Eye size={13} />
               {Number(thread.viewCount)}
             </span>
           )}
@@ -1208,12 +1208,12 @@ function ThreadCard({
               e.stopPropagation();
               onShare(thread.id);
             }}
-            className="p-1 rounded transition-colors hover:bg-white/5"
-            style={{ color: "#444" }}
+            className="p-1 rounded transition-colors hover:bg-black/5"
+            style={{ color: "#9ca3af" }}
             data-ocid={`catalog.thread.share_button.${index}`}
             aria-label="Share this chat"
           >
-            <Share2 size={11} />
+            <Share2 size={13} />
           </button>
           <button
             type="button"
@@ -1221,12 +1221,12 @@ function ThreadCard({
               e.stopPropagation();
               onBookmark(thread.id);
             }}
-            className="p-1 rounded transition-colors hover:bg-white/5"
-            style={{ color: isBookmarked ? "#f0c040" : "#444" }}
+            className="p-1 rounded transition-colors hover:bg-black/5"
+            style={{ color: isBookmarked ? "#f0c040" : "#9ca3af" }}
             data-ocid={`catalog.thread.bookmark_button.${index}`}
             aria-label={isBookmarked ? "Remove bookmark" : "Bookmark this chat"}
           >
-            <Bookmark size={11} fill={isBookmarked ? "#f0c040" : "none"} />
+            <Bookmark size={13} fill={isBookmarked ? "#f0c040" : "none"} />
           </button>
           <button
             type="button"
@@ -1234,12 +1234,12 @@ function ThreadCard({
               e.stopPropagation();
               onReport(thread.id);
             }}
-            className="p-1 rounded transition-colors hover:bg-white/5"
-            style={{ color: isReported ? "#c0392b" : "#444" }}
+            className="p-1 rounded transition-colors hover:bg-black/5"
+            style={{ color: isReported ? "#c0392b" : "#9ca3af" }}
             data-ocid={`catalog.thread.report_button.${index}`}
             aria-label="Report this chat"
           >
-            <Flag size={11} fill={isReported ? "#c0392b" : "none"} />
+            <Flag size={13} fill={isReported ? "#c0392b" : "none"} />
           </button>
         </div>
       </div>
@@ -1329,9 +1329,9 @@ function CatalogReportModal({
     >
       <DialogContent
         style={{
-          backgroundColor: "#1a1a1a",
-          border: "1px solid #2a2a2a",
-          color: "#e0e0e0",
+          backgroundColor: "#f3f4f6",
+          border: "1px solid #e5e7eb",
+          color: "#111827",
         }}
         data-ocid="catalog_report_chat.dialog"
       >
@@ -1341,7 +1341,7 @@ function CatalogReportModal({
           </DialogTitle>
         </DialogHeader>
         <div className="py-2 space-y-3">
-          <p className="font-mono text-xs" style={{ color: "#888" }}>
+          <p className="font-mono text-xs" style={{ color: "#6b7280" }}>
             Select a reason for reporting this chat:
           </p>
           <div className="space-y-2">
@@ -1361,7 +1361,7 @@ function CatalogReportModal({
                 />
                 <span
                   className="font-mono text-sm"
-                  style={{ color: "#e0e0e0" }}
+                  style={{ color: "#111827" }}
                 >
                   {reason}
                 </span>
@@ -1377,7 +1377,7 @@ function CatalogReportModal({
               onClose();
             }}
             className="font-mono text-xs"
-            style={{ color: "#555" }}
+            style={{ color: "#9ca3af" }}
             data-ocid="catalog_report_chat.cancel_button"
           >
             Cancel
@@ -1825,11 +1825,11 @@ export default function CatalogPage() {
         <div>
           <h1
             className="font-mono text-xl font-bold"
-            style={{ color: "#e0e0e0" }}
+            style={{ color: "#111827" }}
           >
             /catalog/
           </h1>
-          <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>
+          <p className="font-mono text-xs mt-0.5" style={{ color: "#9ca3af" }}>
             {loading ? "Loading…" : `${sortedThreads.length} active chats`}
           </p>
         </div>
@@ -1837,9 +1837,9 @@ export default function CatalogPage() {
           onClick={() => setShowNewThread(true)}
           className="font-mono text-xs uppercase tracking-wider"
           style={{
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #4a9e5c",
-            color: "#4a9e5c",
+            backgroundColor: "#f3f4f6",
+            border: "1px solid #2563eb",
+            color: "#2563eb",
           }}
           data-ocid="catalog.new_chat_button"
         >
@@ -1854,9 +1854,9 @@ export default function CatalogPage() {
           className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
           style={{
             backgroundColor:
-              selectedCategory === null ? "#4a9e5c22" : "#1a1a1a",
-            border: `1px solid ${selectedCategory === null ? "#4a9e5c" : "#2a2a2a"}`,
-            color: selectedCategory === null ? "#4a9e5c" : "#888",
+              selectedCategory === null ? "#2563eb22" : "#f3f4f6",
+            border: `1px solid ${selectedCategory === null ? "#2563eb" : "#e5e7eb"}`,
+            color: selectedCategory === null ? "#2563eb" : "#6b7280",
           }}
           onClick={() => setSelectedCategory(null)}
           data-ocid="catalog.category.tab"
@@ -1872,9 +1872,9 @@ export default function CatalogPage() {
               key={String(cat.id)}
               className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
               style={{
-                backgroundColor: active ? `${color}22` : "#1a1a1a",
-                border: `1px solid ${active ? color : "#2a2a2a"}`,
-                color: active ? color : "#888",
+                backgroundColor: active ? `${color}22` : "#f3f4f6",
+                border: `1px solid ${active ? color : "#e5e7eb"}`,
+                color: active ? color : "#6b7280",
               }}
               onClick={() => setSelectedCategory(cat.id)}
               data-ocid="catalog.category.tab"
@@ -1889,7 +1889,7 @@ export default function CatalogPage() {
       {loading ? (
         <div
           className="text-center py-20"
-          style={{ color: "#444" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="catalog.thread.loading_state"
         >
           <p className="font-mono text-sm">Loading threads…</p>
@@ -1897,7 +1897,7 @@ export default function CatalogPage() {
       ) : sortedThreads.length === 0 ? (
         <div
           className="text-center py-20"
-          style={{ color: "#444" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="catalog.thread.empty_state"
         >
           <p className="font-mono text-sm">No threads found.</p>
@@ -1941,16 +1941,16 @@ export default function CatalogPage() {
       >
         <DialogContent
           style={{
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #2a2a2a",
-            color: "#e0e0e0",
+            backgroundColor: "#f3f4f6",
+            border: "1px solid #e5e7eb",
+            color: "#111827",
             maxHeight: "90vh",
             overflowY: "auto",
           }}
           data-ocid="new_chat.dialog"
         >
           <DialogHeader>
-            <DialogTitle className="font-mono" style={{ color: "#4a9e5c" }}>
+            <DialogTitle className="font-mono" style={{ color: "#2563eb" }}>
               New Chat
             </DialogTitle>
           </DialogHeader>
@@ -1961,7 +1961,7 @@ export default function CatalogPage() {
               <label
                 htmlFor="new-thread-title"
                 className="font-mono text-xs uppercase tracking-wider mb-1.5 block"
-                style={{ color: "#888" }}
+                style={{ color: "#6b7280" }}
               >
                 Title
               </label>
@@ -1973,9 +1973,9 @@ export default function CatalogPage() {
                 onKeyDown={(e) => e.key === "Enter" && handleCreateThread()}
                 className="font-mono text-sm"
                 style={{
-                  backgroundColor: "#0d0d0d",
-                  border: "1px solid #2a2a2a",
-                  color: "#e0e0e0",
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  color: "#111827",
                 }}
                 data-ocid="new_thread.title_input"
               />
@@ -1986,7 +1986,7 @@ export default function CatalogPage() {
               <label
                 htmlFor="new-thread-category"
                 className="font-mono text-xs uppercase tracking-wider mb-1.5 block"
-                style={{ color: "#888" }}
+                style={{ color: "#6b7280" }}
               >
                 Category
               </label>
@@ -1994,9 +1994,9 @@ export default function CatalogPage() {
                 <SelectTrigger
                   className="font-mono text-sm"
                   style={{
-                    backgroundColor: "#0d0d0d",
-                    border: "1px solid #2a2a2a",
-                    color: newCategoryId ? "#e0e0e0" : "#555",
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #e5e7eb",
+                    color: newCategoryId ? "#111827" : "#9ca3af",
                   }}
                   data-ocid="new_thread.category_select"
                 >
@@ -2004,8 +2004,8 @@ export default function CatalogPage() {
                 </SelectTrigger>
                 <SelectContent
                   style={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid #2a2a2a",
+                    backgroundColor: "#f3f4f6",
+                    border: "1px solid #e5e7eb",
                     maxHeight: "200px",
                     overflowY: "auto",
                   }}
@@ -2015,7 +2015,7 @@ export default function CatalogPage() {
                       key={String(cat.id)}
                       value={String(cat.id)}
                       className="font-mono text-sm"
-                      style={{ color: "#e0e0e0" }}
+                      style={{ color: "#111827" }}
                     >
                       {cat.name}
                     </SelectItem>
@@ -2028,10 +2028,10 @@ export default function CatalogPage() {
             <div>
               <div
                 className="font-mono text-xs uppercase tracking-wider mb-1.5 block"
-                style={{ color: "#888" }}
+                style={{ color: "#6b7280" }}
               >
                 Media Attachment{" "}
-                <span style={{ color: "#555", textTransform: "none" }}>
+                <span style={{ color: "#9ca3af", textTransform: "none" }}>
                   (optional)
                 </span>
               </div>
@@ -2044,9 +2044,9 @@ export default function CatalogPage() {
                   onChange={(e) => handleMediaUrlChange(e.target.value)}
                   className="font-mono text-sm mb-2"
                   style={{
-                    backgroundColor: "#0d0d0d",
-                    border: "1px solid #2a2a2a",
-                    color: "#e0e0e0",
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #e5e7eb",
+                    color: "#111827",
                   }}
                   data-ocid="new_thread.media_url_input"
                 />
@@ -2061,9 +2061,9 @@ export default function CatalogPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="font-mono text-xs"
                     style={{
-                      backgroundColor: "#0d0d0d",
-                      border: "1px solid #2a2a2a",
-                      color: "#888",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #e5e7eb",
+                      color: "#6b7280",
                     }}
                     data-ocid="new_thread.upload_button"
                   >
@@ -2088,9 +2088,9 @@ export default function CatalogPage() {
                   style={{
                     marginTop: 10,
                     borderRadius: 6,
-                    border: "1px solid #2a2a2a",
+                    border: "1px solid #e5e7eb",
                     padding: "8px",
-                    backgroundColor: "#0d0d0d",
+                    backgroundColor: "#ffffff",
                     position: "relative",
                   }}
                 >
@@ -2111,7 +2111,7 @@ export default function CatalogPage() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#aaa",
+                      color: "#4b5563",
                       fontSize: 11,
                       lineHeight: 1,
                       zIndex: 2,
@@ -2242,8 +2242,8 @@ export default function CatalogPage() {
                         display: "flex",
                         flexDirection: "column",
                         gap: 4,
-                        backgroundColor: "#111",
-                        border: "1px solid #2a2a2a",
+                        backgroundColor: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 4,
                         padding: "8px 10px",
                       }}
@@ -2268,14 +2268,14 @@ export default function CatalogPage() {
                         {tweetLoading ? (
                           <span
                             className="font-mono text-xs"
-                            style={{ color: "#555" }}
+                            style={{ color: "#9ca3af" }}
                           >
                             Loading…
                           </span>
                         ) : (
                           <span
                             className="font-mono text-xs font-semibold"
-                            style={{ color: "#aaa" }}
+                            style={{ color: "#4b5563" }}
                           >
                             {tweetPreview?.authorName ?? "X / Twitter"}
                           </span>
@@ -2285,7 +2285,7 @@ export default function CatalogPage() {
                         <p
                           className="font-mono text-xs"
                           style={{
-                            color: "#888",
+                            color: "#6b7280",
                             lineHeight: 1.5,
                             margin: 0,
                           }}
@@ -2305,7 +2305,7 @@ export default function CatalogPage() {
                           style={{
                             width: "100%",
                             aspectRatio: "16/9",
-                            backgroundColor: "#1a1a1a",
+                            backgroundColor: "#f3f4f6",
                             borderRadius: 4,
                             display: "flex",
                             alignItems: "center",
@@ -2314,7 +2314,7 @@ export default function CatalogPage() {
                         >
                           <span
                             className="font-mono text-xs"
-                            style={{ color: "#555" }}
+                            style={{ color: "#9ca3af" }}
                           >
                             Loading Rumble preview…
                           </span>
@@ -2344,7 +2344,7 @@ export default function CatalogPage() {
                           {rumbleOgMeta.title && (
                             <p
                               className="font-mono text-xs mt-1"
-                              style={{ color: "#aaa", margin: "4px 0 0" }}
+                              style={{ color: "#4b5563", margin: "4px 0 0" }}
                             >
                               {rumbleOgMeta.title}
                             </p>
@@ -2391,8 +2391,8 @@ export default function CatalogPage() {
                         display: "flex",
                         flexDirection: "column",
                         gap: 4,
-                        backgroundColor: "#111",
-                        border: "1px solid #2a2a2a",
+                        backgroundColor: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 4,
                         padding: "8px 10px",
                       }}
@@ -2421,7 +2421,7 @@ export default function CatalogPage() {
                         {redditLoading ? (
                           <span
                             className="font-mono text-xs"
-                            style={{ color: "#555" }}
+                            style={{ color: "#9ca3af" }}
                           >
                             Loading…
                           </span>
@@ -2451,7 +2451,11 @@ export default function CatalogPage() {
                       {!redditLoading && redditPreview?.title && (
                         <p
                           className="font-mono text-xs"
-                          style={{ color: "#888", lineHeight: 1.5, margin: 0 }}
+                          style={{
+                            color: "#6b7280",
+                            lineHeight: 1.5,
+                            margin: 0,
+                          }}
                         >
                           {redditPreview.title.slice(0, 100)}
                           {redditPreview.title.length > 100 ? "…" : ""}
@@ -2467,8 +2471,8 @@ export default function CatalogPage() {
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
-                        backgroundColor: "#111",
-                        border: "1px solid #2a2a2a",
+                        backgroundColor: "#f3f4f6",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 4,
                         padding: "8px 10px",
                       }}
@@ -2480,13 +2484,13 @@ export default function CatalogPage() {
                               width: 44,
                               height: 44,
                               borderRadius: 4,
-                              backgroundColor: "#2a2a2a",
+                              backgroundColor: "#e5e7eb",
                               flexShrink: 0,
                             }}
                           />
                           <span
                             className="font-mono text-xs"
-                            style={{ color: "#555" }}
+                            style={{ color: "#9ca3af" }}
                           >
                             Loading preview…
                           </span>
@@ -2515,14 +2519,14 @@ export default function CatalogPage() {
                             {linkOgMeta?.title && (
                               <p
                                 className="font-mono text-xs font-semibold truncate"
-                                style={{ color: "#e0e0e0", margin: 0 }}
+                                style={{ color: "#111827", margin: 0 }}
                               >
                                 {linkOgMeta.title}
                               </p>
                             )}
                             <p
                               className="font-mono text-[10px] truncate"
-                              style={{ color: "#555", margin: 0 }}
+                              style={{ color: "#9ca3af", margin: 0 }}
                             >
                               {(() => {
                                 try {
@@ -2553,7 +2557,7 @@ export default function CatalogPage() {
                 resetDialog();
               }}
               className="font-mono text-xs"
-              style={{ color: "#888" }}
+              style={{ color: "#6b7280" }}
               data-ocid="new_thread.cancel_button"
               disabled={creating}
             >
@@ -2563,8 +2567,8 @@ export default function CatalogPage() {
               onClick={handleCreateThread}
               className="font-mono text-xs uppercase tracking-wider"
               style={{
-                backgroundColor: "#4a9e5c",
-                color: "#0d0d0d",
+                backgroundColor: "#2563eb",
+                color: "#ffffff",
               }}
               disabled={creating}
               data-ocid="new_thread.submit_button"

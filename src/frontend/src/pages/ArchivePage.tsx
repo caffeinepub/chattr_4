@@ -40,8 +40,8 @@ function ArchiveCard({
 }: ArchiveCardProps) {
   const category = categories.find((c) => c.id === thread.categoryId);
   const catColor = category
-    ? (CATEGORY_COLORS[category.name] ?? "#555")
-    : "#555";
+    ? (CATEGORY_COLORS[category.name] ?? "#9ca3af")
+    : "#9ca3af";
   const lastActivityMs = backendApi.nsToMs(thread.lastActivity);
   const creatorProfile = profiles.find(
     (p) => p.sessionId === thread.creatorSessionId,
@@ -52,7 +52,7 @@ function ArchiveCard({
     <div
       className="thread-card cursor-pointer rounded"
       style={{
-        backgroundColor: "#141414",
+        backgroundColor: "#f8f9fa",
         border: "1px solid #222",
         padding: "12px",
         opacity: 0.8,
@@ -81,8 +81,8 @@ function ArchiveCard({
           <span
             className="font-mono text-xs px-2 py-0.5 rounded"
             style={{
-              backgroundColor: "#77777715",
-              color: "#666",
+              backgroundColor: "#f3f4f6",
+              color: "#6b7280",
               border: "1px solid #33333366",
             }}
           >
@@ -94,7 +94,7 @@ function ArchiveCard({
       <h3
         className="font-sans text-sm font-medium mb-3 leading-snug"
         style={{
-          color: "#999",
+          color: "#6b7280",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
@@ -105,14 +105,14 @@ function ArchiveCard({
       </h3>
 
       <div className="flex items-center justify-between">
-        <span className="font-mono text-xs" style={{ color: "#444" }}>
+        <span className="font-mono text-xs" style={{ color: "#9ca3af" }}>
           {Number(thread.postCount)} posts
         </span>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs" style={{ color: "#333" }}>
+          <span className="font-mono text-xs" style={{ color: "#9ca3af" }}>
             {creatorName}
           </span>
-          <span className="font-mono text-xs" style={{ color: "#2a2a2a" }}>
+          <span className="font-mono text-xs" style={{ color: "#e5e7eb" }}>
             {timeAgo(lastActivityMs)}
           </span>
         </div>
@@ -165,11 +165,11 @@ export default function ArchivePage() {
       <div className="mb-6">
         <h1
           className="font-mono text-xl font-bold"
-          style={{ color: "#e0e0e0" }}
+          style={{ color: "#111827" }}
         >
           /archive/
         </h1>
-        <p className="font-mono text-xs mt-1" style={{ color: "#444" }}>
+        <p className="font-mono text-xs mt-1" style={{ color: "#9ca3af" }}>
           {loading
             ? "Loading…"
             : `${sorted.length} archived threads — read-only`}
@@ -182,10 +182,9 @@ export default function ArchivePage() {
           type="button"
           className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
           style={{
-            backgroundColor:
-              selectedCategory === null ? "#33333333" : "#141414",
-            border: `1px solid ${selectedCategory === null ? "#444" : "#222"}`,
-            color: selectedCategory === null ? "#888" : "#555",
+            backgroundColor: selectedCategory === null ? "#eff6ff" : "#f8f9fa",
+            border: `1px solid ${selectedCategory === null ? "#2563eb" : "#e5e7eb"}`,
+            color: selectedCategory === null ? "#2563eb" : "#6b7280",
           }}
           onClick={() => setSelectedCategory(null)}
           data-ocid="archive.category.tab"
@@ -193,7 +192,7 @@ export default function ArchivePage() {
           All
         </button>
         {categoriesWithThreads.map((cat) => {
-          const color = CATEGORY_COLORS[cat.name] ?? "#555";
+          const color = CATEGORY_COLORS[cat.name] ?? "#9ca3af";
           const active = selectedCategory === cat.id;
           return (
             <button
@@ -201,9 +200,9 @@ export default function ArchivePage() {
               key={String(cat.id)}
               className="font-mono text-xs px-3 py-1.5 rounded uppercase tracking-wider transition-all"
               style={{
-                backgroundColor: active ? `${color}15` : "#141414",
-                border: `1px solid ${active ? `${color}44` : "#222"}`,
-                color: active ? `${color}aa` : "#555",
+                backgroundColor: active ? `${color}15` : "#f8f9fa",
+                border: `1px solid ${active ? `${color}44` : "#e5e7eb"}`,
+                color: active ? `${color}aa` : "#9ca3af",
               }}
               onClick={() => setSelectedCategory(cat.id)}
               data-ocid="archive.category.tab"
@@ -217,18 +216,18 @@ export default function ArchivePage() {
       {/* Divider with archive warning */}
       <div
         className="flex items-center gap-3 mb-6 font-mono text-xs"
-        style={{ color: "#333" }}
+        style={{ color: "#9ca3af" }}
       >
-        <div style={{ flex: 1, height: 1, backgroundColor: "#1a1a1a" }} />
+        <div style={{ flex: 1, height: 1, backgroundColor: "#f3f4f6" }} />
         <span>ARCHIVED CONTENT — VIEWING ONLY</span>
-        <div style={{ flex: 1, height: 1, backgroundColor: "#1a1a1a" }} />
+        <div style={{ flex: 1, height: 1, backgroundColor: "#f3f4f6" }} />
       </div>
 
       {/* Thread list */}
       {loading ? (
         <div
           className="text-center py-20"
-          style={{ color: "#333" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="archive.thread.loading_state"
         >
           <p className="font-mono text-sm">Loading archive…</p>
@@ -236,7 +235,7 @@ export default function ArchivePage() {
       ) : sorted.length === 0 ? (
         <div
           className="text-center py-20"
-          style={{ color: "#333" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="archive.thread.empty_state"
         >
           <p className="font-mono text-sm">Archive is empty.</p>

@@ -45,15 +45,15 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
     <div className="max-w-sm mx-auto px-4 py-24">
       <div
         className="rounded p-6"
-        style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+        style={{ backgroundColor: "#f3f4f6", border: "1px solid #e5e7eb" }}
       >
         <h1
           className="font-mono text-lg font-bold mb-1"
-          style={{ color: "#4a9e5c" }}
+          style={{ color: "#2563eb" }}
         >
           {"//ADMIN"}
         </h1>
-        <p className="font-mono text-xs mb-6" style={{ color: "#444" }}>
+        <p className="font-mono text-xs mb-6" style={{ color: "#9ca3af" }}>
           Password required
         </p>
 
@@ -65,9 +65,9 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
             onChange={(e) => setPassword(e.target.value)}
             className="font-mono text-sm"
             style={{
-              backgroundColor: "#0d0d0d",
-              border: "1px solid #2a2a2a",
-              color: "#e0e0e0",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
+              color: "#111827",
             }}
             data-ocid="admin.password_input"
             autoFocus
@@ -84,7 +84,7 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
           <Button
             type="submit"
             className="w-full font-mono text-xs uppercase tracking-wider"
-            style={{ backgroundColor: "#4a9e5c", color: "#0d0d0d" }}
+            style={{ backgroundColor: "#2563eb", color: "#ffffff" }}
             data-ocid="admin.login_button"
           >
             Authenticate
@@ -121,19 +121,19 @@ function ThreadsTab() {
     <div>
       <h2
         className="font-mono text-sm font-bold mb-4"
-        style={{ color: "#888" }}
+        style={{ color: "#6b7280" }}
       >
         All Threads ({threads.length})
       </h2>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow style={{ borderColor: "#2a2a2a" }}>
+            <TableRow style={{ borderColor: "#e5e7eb" }}>
               {["Title", "Category", "Posts", "Status", "Actions"].map((h) => (
                 <TableHead
                   key={h}
                   className="font-mono text-xs uppercase"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {h}
                 </TableHead>
@@ -144,24 +144,24 @@ function ThreadsTab() {
             {threads.map((thread, i) => (
               <TableRow
                 key={String(thread.id)}
-                style={{ borderColor: "#1a1a1a" }}
+                style={{ borderColor: "#f3f4f6" }}
                 data-ocid={`admin.thread.row.${i + 1}`}
               >
                 <TableCell
                   className="font-sans text-sm max-w-xs truncate"
-                  style={{ color: "#ccc" }}
+                  style={{ color: "#374151" }}
                 >
                   {thread.title}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#888" }}
+                  style={{ color: "#6b7280" }}
                 >
                   {getCatName(thread.categoryId)}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#888" }}
+                  style={{ color: "#6b7280" }}
                 >
                   {Number(thread.postCount)}
                 </TableCell>
@@ -190,8 +190,8 @@ function ThreadsTab() {
                       <span
                         className="font-mono text-xs px-1.5 py-0.5 rounded"
                         style={{
-                          backgroundColor: "#4a9e5c22",
-                          color: "#4a9e5c",
+                          backgroundColor: "#2563eb22",
+                          color: "#2563eb",
                         }}
                       >
                         active
@@ -205,7 +205,7 @@ function ThreadsTab() {
                       <button
                         type="button"
                         className="font-mono text-xs px-2 py-1 rounded transition-colors"
-                        style={{ border: "1px solid #444", color: "#888" }}
+                        style={{ border: "1px solid #444", color: "#6b7280" }}
                         onClick={async () => {
                           await backendApi.updateThread(
                             thread.id,
@@ -225,8 +225,8 @@ function ThreadsTab() {
                         type="button"
                         className="font-mono text-xs px-2 py-1 rounded transition-colors"
                         style={{
-                          border: "1px solid #4a9e5c44",
-                          color: "#4a9e5c",
+                          border: "1px solid #2563eb44",
+                          color: "#2563eb",
                         }}
                         onClick={async () => {
                           await backendApi.updateThread(
@@ -290,19 +290,19 @@ function PostsTab() {
     <div>
       <h2
         className="font-mono text-sm font-bold mb-4"
-        style={{ color: "#888" }}
+        style={{ color: "#6b7280" }}
       >
         Recent Posts (last 50)
       </h2>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow style={{ borderColor: "#2a2a2a" }}>
+            <TableRow style={{ borderColor: "#e5e7eb" }}>
               {["Author", "Thread", "Content", "Time", "Actions"].map((h) => (
                 <TableHead
                   key={h}
                   className="font-mono text-xs uppercase"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {h}
                 </TableHead>
@@ -313,30 +313,30 @@ function PostsTab() {
             {posts.map((post, i) => (
               <TableRow
                 key={String(post.id)}
-                style={{ borderColor: "#1a1a1a" }}
+                style={{ borderColor: "#f3f4f6" }}
                 data-ocid={`admin.post.row.${i + 1}`}
               >
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#e0e0e0" }}
+                  style={{ color: "#111827" }}
                 >
                   {post.authorSessionId}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#888" }}
+                  style={{ color: "#6b7280" }}
                 >
                   #{String(post.threadId)}
                 </TableCell>
                 <TableCell
                   className="text-sm max-w-xs truncate"
-                  style={{ color: "#aaa" }}
+                  style={{ color: "#4b5563" }}
                 >
                   {post.content || `[${post.mediaType}]`}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {timeAgo(backendApi.nsToMs(post.createdAt))}
                 </TableCell>
@@ -400,11 +400,11 @@ function BansTab() {
       {/* Ban form */}
       <div
         className="rounded p-4 mb-6"
-        style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a" }}
+        style={{ backgroundColor: "#f8f9fa", border: "1px solid #e5e7eb" }}
       >
         <h3
           className="font-mono text-xs uppercase tracking-wider mb-3"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           Ban User
         </h3>
@@ -415,9 +415,9 @@ function BansTab() {
             onChange={(e) => setBanId(e.target.value)}
             className="font-mono text-xs w-40"
             style={{
-              backgroundColor: "#0d0d0d",
-              border: "1px solid #2a2a2a",
-              color: "#e0e0e0",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
+              color: "#111827",
             }}
             data-ocid="admin.ban_user_input"
           />
@@ -427,9 +427,9 @@ function BansTab() {
             onChange={(e) => setBanReason(e.target.value)}
             className="font-mono text-xs flex-1"
             style={{
-              backgroundColor: "#0d0d0d",
-              border: "1px solid #2a2a2a",
-              color: "#e0e0e0",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
+              color: "#111827",
             }}
             data-ocid="admin.ban_reason_input"
           />
@@ -448,14 +448,14 @@ function BansTab() {
       {/* Bans list */}
       <h2
         className="font-mono text-sm font-bold mb-3"
-        style={{ color: "#888" }}
+        style={{ color: "#6b7280" }}
       >
         Active Bans ({bans.length})
       </h2>
       {bans.length === 0 ? (
         <p
           className="font-mono text-xs"
-          style={{ color: "#444" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="admin.bans.empty_state"
         >
           No active bans.
@@ -463,12 +463,12 @@ function BansTab() {
       ) : (
         <Table>
           <TableHeader>
-            <TableRow style={{ borderColor: "#2a2a2a" }}>
+            <TableRow style={{ borderColor: "#e5e7eb" }}>
               {["User ID", "Reason", "Banned", "Actions"].map((h) => (
                 <TableHead
                   key={h}
                   className="font-mono text-xs uppercase"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {h}
                 </TableHead>
@@ -479,21 +479,21 @@ function BansTab() {
             {bans.map((ban, i) => (
               <TableRow
                 key={ban.sessionId}
-                style={{ borderColor: "#1a1a1a" }}
+                style={{ borderColor: "#f3f4f6" }}
                 data-ocid={`admin.ban.row.${i + 1}`}
               >
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#e0e0e0" }}
+                  style={{ color: "#111827" }}
                 >
                   {ban.sessionId}
                 </TableCell>
-                <TableCell className="text-sm" style={{ color: "#aaa" }}>
+                <TableCell className="text-sm" style={{ color: "#4b5563" }}>
                   {ban.reason}
                 </TableCell>
                 <TableCell
                   className="font-mono text-xs"
-                  style={{ color: "#555" }}
+                  style={{ color: "#9ca3af" }}
                 >
                   {timeAgo(backendApi.nsToMs(ban.timestamp))}
                 </TableCell>
@@ -501,7 +501,7 @@ function BansTab() {
                   <button
                     type="button"
                     className="font-mono text-xs px-2 py-1 rounded"
-                    style={{ border: "1px solid #4a9e5c44", color: "#4a9e5c" }}
+                    style={{ border: "1px solid #2563eb44", color: "#2563eb" }}
                     onClick={async () => {
                       await backendApi.unbanUser(ban.sessionId);
                       toast.success(`${ban.sessionId} unbanned`);
@@ -552,11 +552,11 @@ function CategoriesTab() {
       {/* Add category form */}
       <div
         className="rounded p-4 mb-6"
-        style={{ backgroundColor: "#141414", border: "1px solid #2a2a2a" }}
+        style={{ backgroundColor: "#f8f9fa", border: "1px solid #e5e7eb" }}
       >
         <h3
           className="font-mono text-xs uppercase tracking-wider mb-3"
-          style={{ color: "#888" }}
+          style={{ color: "#6b7280" }}
         >
           Add Category
         </h3>
@@ -567,9 +567,9 @@ function CategoriesTab() {
             onChange={(e) => setNewCatName(e.target.value)}
             className="font-mono text-xs flex-1"
             style={{
-              backgroundColor: "#0d0d0d",
-              border: "1px solid #2a2a2a",
-              color: "#e0e0e0",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
+              color: "#111827",
             }}
             data-ocid="admin.add_category_input"
           />
@@ -577,7 +577,7 @@ function CategoriesTab() {
             type="submit"
             size="sm"
             className="font-mono text-xs uppercase shrink-0"
-            style={{ backgroundColor: "#4a9e5c", color: "#0d0d0d" }}
+            style={{ backgroundColor: "#2563eb", color: "#ffffff" }}
             data-ocid="admin.add_category_button"
           >
             Add
@@ -588,7 +588,7 @@ function CategoriesTab() {
       {/* Category list */}
       <h2
         className="font-mono text-sm font-bold mb-3"
-        style={{ color: "#888" }}
+        style={{ color: "#6b7280" }}
       >
         Categories ({categories.length})
       </h2>
@@ -597,10 +597,10 @@ function CategoriesTab() {
           <div
             key={String(cat.id)}
             className="flex items-center justify-between px-3 py-2 rounded"
-            style={{ backgroundColor: "#141414", border: "1px solid #1a1a1a" }}
+            style={{ backgroundColor: "#f8f9fa", border: "1px solid #f3f4f6" }}
             data-ocid={`admin.category.row.${i + 1}`}
           >
-            <span className="font-mono text-sm" style={{ color: "#e0e0e0" }}>
+            <span className="font-mono text-sm" style={{ color: "#111827" }}>
               {cat.name}
             </span>
             <button
@@ -642,14 +642,14 @@ function ReportsTab() {
     <div>
       <h2
         className="font-mono text-sm font-bold mb-4"
-        style={{ color: "#888" }}
+        style={{ color: "#6b7280" }}
       >
         Thread Reports ({reports.length})
       </h2>
       {reports.length === 0 ? (
         <p
           className="font-mono text-xs"
-          style={{ color: "#444" }}
+          style={{ color: "#9ca3af" }}
           data-ocid="admin.reports.empty_state"
         >
           No reports yet.
@@ -658,12 +658,12 @@ function ReportsTab() {
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow style={{ borderColor: "#2a2a2a" }}>
+              <TableRow style={{ borderColor: "#e5e7eb" }}>
                 {["Thread ID", "Reporter", "Reason", "Time"].map((h) => (
                   <TableHead
                     key={h}
                     className="font-mono text-xs uppercase"
-                    style={{ color: "#555" }}
+                    style={{ color: "#9ca3af" }}
                   >
                     {h}
                   </TableHead>
@@ -674,18 +674,18 @@ function ReportsTab() {
               {reports.map((report, i) => (
                 <TableRow
                   key={String(report.id)}
-                  style={{ borderColor: "#1a1a1a" }}
+                  style={{ borderColor: "#f3f4f6" }}
                   data-ocid={`admin.report.row.${i + 1}`}
                 >
                   <TableCell
                     className="font-mono text-xs"
-                    style={{ color: "#e0e0e0" }}
+                    style={{ color: "#111827" }}
                   >
                     #{String(report.threadId)}
                   </TableCell>
                   <TableCell
                     className="font-mono text-xs"
-                    style={{ color: "#888" }}
+                    style={{ color: "#6b7280" }}
                   >
                     {report.reporterSessionId.slice(0, 8)}
                   </TableCell>
@@ -703,7 +703,7 @@ function ReportsTab() {
                   </TableCell>
                   <TableCell
                     className="font-mono text-xs"
-                    style={{ color: "#555" }}
+                    style={{ color: "#9ca3af" }}
                   >
                     {timeAgo(backendApi.nsToMs(report.createdAt))}
                   </TableCell>
@@ -724,16 +724,16 @@ function AdminDashboard() {
       <div className="flex items-center gap-3 mb-6">
         <h1
           className="font-mono text-xl font-bold"
-          style={{ color: "#4a9e5c" }}
+          style={{ color: "#2563eb" }}
         >
           {"//ADMIN"}
         </h1>
         <span
           className="font-mono text-xs px-2 py-0.5 rounded"
           style={{
-            backgroundColor: "#4a9e5c22",
-            color: "#4a9e5c",
-            border: "1px solid #4a9e5c44",
+            backgroundColor: "#2563eb22",
+            color: "#2563eb",
+            border: "1px solid #2563eb44",
           }}
         >
           AUTHENTICATED
@@ -743,7 +743,7 @@ function AdminDashboard() {
       <Tabs defaultValue="threads">
         <TabsList
           className="font-mono text-xs mb-6"
-          style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+          style={{ backgroundColor: "#f3f4f6", border: "1px solid #e5e7eb" }}
         >
           <TabsTrigger
             value="threads"
@@ -784,7 +784,7 @@ function AdminDashboard() {
 
         <div
           className="rounded p-4"
-          style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
+          style={{ backgroundColor: "#f3f4f6", border: "1px solid #e5e7eb" }}
         >
           <TabsContent value="threads">
             <ThreadsTab />

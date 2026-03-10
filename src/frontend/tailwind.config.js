@@ -70,24 +70,24 @@ export default {
           border: "oklch(var(--sidebar-border))",
           ring: "oklch(var(--sidebar-ring))",
         },
+        /* Semantic app palette tokens */
+        "ib-bg": "#ffffff",
+        "ib-surface": "#f3f4f6",
+        "ib-border": "#e5e7eb",
+        "ib-blue": "#2563eb",
+        "ib-blue-dim": "#1d4ed8",
+        "ib-text": "#111827",
+        "ib-meta": "#6b7280",
+        "ib-header": "#ffffff",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      colors: {
-        "ib-bg": "#0d0d0d",
-        "ib-surface": "#1a1a1a",
-        "ib-border": "#2a2a2a",
-        "ib-green": "#4a9e5c",
-        "ib-green-dim": "#2d6b3a",
-        "ib-text": "#e0e0e0",
-        "ib-meta": "#888888",
-        "ib-header": "#111111",
-      },
       boxShadow: {
         xs: "0 1px 2px 0 rgba(0,0,0,0.05)",
+        card: "0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px -1px rgba(0,0,0,0.04)",
       },
       keyframes: {
         "accordion-down": {
