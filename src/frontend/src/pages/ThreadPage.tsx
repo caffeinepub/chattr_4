@@ -2855,10 +2855,6 @@ export default function ThreadPage() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   // Report chat modal state
   const [reportChatModalOpen, setReportChatModalOpen] = useState(false);
-  // Thread bookmark / report filled state
-  const [threadBookmarked, setThreadBookmarked] = useState(false);
-  const [threadBookmarkId, setThreadBookmarkId] = useState<bigint | null>(null);
-  const [threadReported, setThreadReported] = useState(false);
 
   // Voice recording state
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -2975,37 +2971,6 @@ export default function ThreadPage() {
       backendApi.recordView(threadIdBig, sessionId).catch(() => {});
     }
   }, [threadIdBig, threadIdStr, sessionId]);
-
-  // Load persisted bookmark / report state for this thread on mount
-  useEffect(() => {
-    async function loadPersistedThreadState() {
-      try {
-        const [bookmarks, reports] = await Promise.all([
-          backendApi.getBookmarks(sessionId),
-          backendApi.getThreadReports(),
-        ]);
-        const myBookmark = bookmarks.find(
-          (b) =>
-            b.targetType === "thread" && String(b.targetId) === threadIdStr,
-        );
-        if (myBookmark) {
-          setThreadBookmarked(true);
-          setThreadBookmarkId(myBookmark.id);
-        }
-        const myReport = reports.find(
-          (r) =>
-            r.reporterSessionId === sessionId &&
-            String(r.threadId) === threadIdStr,
-        );
-        if (myReport) {
-          setThreadReported(true);
-        }
-      } catch {
-        // Non-fatal
-      }
-    }
-    loadPersistedThreadState();
-  }, [sessionId, threadIdStr]);
 
   // Detect whether the title wraps to more than one line
   // biome-ignore lint/correctness/useExhaustiveDependencies: titleCollapsed changes layout so we re-measure; intentional
@@ -3341,40 +3306,6 @@ export default function ThreadPage() {
     }
   }
 
-  async function handleBookmarkThread() {
-    if (threadBookmarked && threadBookmarkId !== null) {
-      try {
-        await backendApi.removeBookmark(sessionId, threadBookmarkId);
-        setThreadBookmarked(false);
-        setThreadBookmarkId(null);
-        toast.success("Bookmark removed");
-      } catch {
-        toast.error("Failed to remove bookmark");
-      }
-    } else {
-      try {
-        const bookmark = await backendApi.addBookmark(
-          sessionId,
-          "thread",
-          threadIdBig,
-        );
-        setThreadBookmarked(true);
-        setThreadBookmarkId(bookmark.id);
-        toast.success("Chat bookmarked");
-      } catch {
-        toast.error("Failed to bookmark");
-      }
-    }
-  }
-
-  function handleShareThread() {
-    const url = `${window.location.origin}/thread/${threadIdStr}`;
-    navigator.clipboard.writeText(url).then(
-      () => toast.success("Link copied to clipboard"),
-      () => toast.error("Failed to copy link"),
-    );
-  }
-
   async function handleVoiceMessage(audioDataUrl: string, _durationMs: number) {
     const banned = await backendApi.isBanned(sessionId);
     if (banned) {
@@ -3538,9 +3469,6 @@ export default function ThreadPage() {
     ? (CATEGORY_COLORS[category.name] ?? "#9ca3af")
     : "#9ca3af";
   const live = isThreadLive(threadIdNum);
-  const creatorProfile = profileMap.get(thread.creatorSessionId);
-  const creatorName = creatorProfile?.username ?? thread.creatorSessionId;
-  const createdAtMs = backendApi.nsToMs(thread.createdAt);
 
   return (
     <div
@@ -3555,7 +3483,11 @@ export default function ThreadPage() {
           borderBottomColor: "#e5e7eb",
         }}
       >
-        <div className="max-w-3xl mx-auto flex items-center gap-3 px-3 py-1.5 md:py-2">
+        {/* ── Row 1: back + title + chevron + action icons ── */}
+        <div
+          className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2"
+          data-ocid="thread.header_row1"
+        >
           <button
             type="button"
             onClick={() => navigate({ to: "/" })}
@@ -3567,180 +3499,119 @@ export default function ThreadPage() {
             <ArrowLeft size={16} />
           </button>
 
-          <div className="flex-1 min-w-0">
-            {/* ── Row 1: category tag (left) + live indicator (right) ── */}
-            <div className="flex items-center justify-between gap-2 mb-0.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span
-                  className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                  style={{
-                    backgroundColor: `${catColor}22`,
-                    color: catColor,
-                    border: `1px solid ${catColor}44`,
-                  }}
-                >
-                  {category?.name ?? "Unknown"}
-                </span>
-                {thread.isClosed && (
-                  <span
-                    className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                    style={{
-                      backgroundColor: "#c0392b22",
-                      color: "#c0392b",
-                      border: "1px solid #c0392b44",
-                    }}
-                  >
-                    CLOSED
-                  </span>
-                )}
-                {thread.isArchived && (
-                  <span
-                    className="font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                    style={{
-                      backgroundColor: "#77777722",
-                      color: "#6b7280",
-                      border: "1px solid #77777744",
-                    }}
-                  >
-                    ARCHIVED
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span
-                  className={live ? "animate-pulse" : ""}
-                  style={{
-                    display: "inline-block",
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
-                    backgroundColor: live ? "#2563eb" : "#9ca3af",
-                    boxShadow: live ? "0 0 5px #2563eb" : "none",
-                  }}
-                />
-                <span
-                  className="font-mono text-[10px] uppercase tracking-wider"
-                  style={{ color: live ? "#2563eb" : "#9ca3af" }}
-                >
-                  {live ? "LIVE" : "OFFLINE"}
-                </span>
-                <span
-                  className="font-mono text-[10px] ml-0.5"
-                  style={{ color: "#9ca3af" }}
-                >
-                  {Number(thread.postCount)}
-                </span>
-              </div>
-            </div>
-
-            {/* ── Row 2: title + chevron (only when multi-line or collapsed) ── */}
-            <div className="flex items-start gap-1">
-              <h1
-                ref={titleRef}
-                className={`font-semibold text-base leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
-                style={{ color: "#111827" }}
+          {/* Title + optional chevron */}
+          <div className="flex items-start gap-1 flex-1 min-w-0">
+            <h1
+              ref={titleRef}
+              className={`font-semibold text-base leading-snug flex-1 min-w-0${titleCollapsed ? " truncate" : ""}`}
+              style={{ color: "#111827" }}
+            >
+              {thread.title}
+            </h1>
+            {(titleIsMultiLine || titleCollapsed) && (
+              <button
+                type="button"
+                onClick={() => setTitleCollapsed((v) => !v)}
+                className="shrink-0 p-0.5 rounded transition-colors hover:bg-black/5 mt-0.5"
+                style={{ color: "#9ca3af" }}
+                aria-label={
+                  titleCollapsed ? "Show full title" : "Collapse title"
+                }
+                data-ocid="thread.title_toggle"
               >
-                {thread.title}
-              </h1>
-              {(titleIsMultiLine || titleCollapsed) && (
-                <button
-                  type="button"
-                  onClick={() => setTitleCollapsed((v) => !v)}
-                  className="shrink-0 p-0.5 rounded transition-colors hover:bg-black/5 mt-0.5"
-                  style={{ color: "#9ca3af" }}
-                  aria-label={
-                    titleCollapsed ? "Show full title" : "Collapse title"
-                  }
-                  data-ocid="thread.title_toggle"
-                >
-                  {titleCollapsed ? (
-                    <ChevronDown size={13} />
-                  ) : (
-                    <ChevronUp size={13} />
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* ── Row 3: creator username + timestamp + counts + bookmark/report (right) ── */}
-            <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className="font-mono"
-                style={{ fontSize: "0.75rem", color: "#9ca3af" }}
-              >
-                {creatorName}
-              </span>
-              <span
-                className="font-mono"
-                style={{ fontSize: "0.75rem", color: "#9ca3af" }}
-              >
-                {timeAgo(createdAtMs)}
-              </span>
-              <div className="flex items-center gap-0.5 ml-auto">
-                {/* Post count */}
-                {Number(thread.postCount) > 0 && (
-                  <span
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                    style={{ color: "#9ca3af" }}
-                    title={`${Number(thread.postCount)} posts`}
-                  >
-                    <MessageSquare size={11} />
-                    {Number(thread.postCount)}
-                  </span>
+                {titleCollapsed ? (
+                  <ChevronDown size={13} />
+                ) : (
+                  <ChevronUp size={13} />
                 )}
-                {/* View count */}
-                {Number(thread.viewCount) > 0 && (
-                  <span
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] px-1 py-0.5 rounded"
-                    style={{ color: "#9ca3af" }}
-                    title={`${Number(thread.viewCount)} views`}
-                  >
-                    <Eye size={11} />
-                    {Number(thread.viewCount)}
-                  </span>
-                )}
-                {/* Share button */}
-                <button
-                  type="button"
-                  onClick={handleShareThread}
-                  className="p-1 rounded transition-colors hover:bg-black/5"
-                  style={{ color: "#9ca3af" }}
-                  aria-label="Share this chat"
-                  data-ocid="thread.share_button"
-                >
-                  <Share2 size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBookmarkThread}
-                  className="p-1 rounded transition-colors hover:bg-black/5"
-                  style={{ color: threadBookmarked ? "#f0c040" : "#9ca3af" }}
-                  aria-label={
-                    threadBookmarked ? "Remove bookmark" : "Bookmark this chat"
-                  }
-                  data-ocid="thread.bookmark_button"
-                >
-                  <Bookmark
-                    size={12}
-                    fill={threadBookmarked ? "#f0c040" : "none"}
-                  />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReportChatModalOpen(true);
-                    setThreadReported(true);
-                  }}
-                  className="p-1 rounded transition-colors hover:bg-black/5"
-                  style={{ color: threadReported ? "#c0392b" : "#9ca3af" }}
-                  aria-label="Report this chat"
-                  data-ocid="thread.report_chat_button"
-                >
-                  <Flag size={12} fill={threadReported ? "#c0392b" : "none"} />
-                </button>
-              </div>
-            </div>
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* ── Row 2: category · badges · live · stats ── */}
+        <div
+          className="max-w-3xl mx-auto flex items-center flex-wrap gap-x-2 gap-y-1 px-3 py-1.5 border-t border-gray-100"
+          data-ocid="thread.header_row2"
+        >
+          {/* Category tag */}
+          <span
+            className="font-mono text-[11px] px-1.5 py-0.5 rounded shrink-0"
+            style={{
+              backgroundColor: `${catColor}22`,
+              color: catColor,
+              border: `1px solid ${catColor}44`,
+            }}
+          >
+            {category?.name ?? "Unknown"}
+          </span>
+          {thread.isClosed && (
+            <span
+              className="font-mono text-[11px] px-1.5 py-0.5 rounded shrink-0"
+              style={{
+                backgroundColor: "#c0392b22",
+                color: "#c0392b",
+                border: "1px solid #c0392b44",
+              }}
+            >
+              CLOSED
+            </span>
+          )}
+          {thread.isArchived && (
+            <span
+              className="font-mono text-[11px] px-1.5 py-0.5 rounded shrink-0"
+              style={{
+                backgroundColor: "#77777722",
+                color: "#6b7280",
+                border: "1px solid #77777744",
+              }}
+            >
+              ARCHIVED
+            </span>
+          )}
+
+          {/* Live indicator */}
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
+            <span
+              className={live ? "animate-pulse" : ""}
+              style={{
+                display: "inline-block",
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                backgroundColor: live ? "#2563eb" : "#9ca3af",
+                boxShadow: live ? "0 0 5px #2563eb" : "none",
+              }}
+            />
+            <span
+              className="font-mono text-[11px] uppercase tracking-wider"
+              style={{ color: live ? "#2563eb" : "#9ca3af" }}
+            >
+              {live ? "LIVE" : "OFFLINE"}
+            </span>
+          </div>
+
+          {/* Stats */}
+          {Number(thread.postCount) > 0 && (
+            <span
+              className="inline-flex items-center gap-1 font-mono text-[11px]"
+              style={{ color: "#9ca3af" }}
+              title={`${Number(thread.postCount)} posts`}
+            >
+              <MessageSquare size={11} />
+              {Number(thread.postCount)}
+            </span>
+          )}
+          {Number(thread.viewCount) > 0 && (
+            <span
+              className="inline-flex items-center gap-1 font-mono text-[11px]"
+              style={{ color: "#9ca3af" }}
+              title={`${Number(thread.viewCount)} views`}
+            >
+              <Eye size={11} />
+              {Number(thread.viewCount)}
+            </span>
+          )}
         </div>
       </div>
 
